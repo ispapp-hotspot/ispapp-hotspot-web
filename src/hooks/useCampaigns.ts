@@ -1,7 +1,35 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { campaignsApi } from '@/services/api'
-import type { CampaignMedia } from '@/types'
+import http from '@/lib/http'
+import type { Campaign, CampaignMedia, CampaignStats } from '@/types'
+
+function fetchCampaigns(companyId: string) {
+  return http.get<Campaign[]>(`/companies/${companyId}/campaigns`).then((r) => r.data)
+}
+function createCampaign(companyId: string, name: string) {
+  return http.post<Campaign>(`/companies/${companyId}/campaigns`, { name }).then((r) => r.data)
+}
+function updateCampaign(companyId: string, id: string, name: string) {
+  return http.put<Campaign>(`/companies/${companyId}/campaigns/${id}`, { name }).then((r) => r.data)
+}
+function toggleCampaign(companyId: string, id: string) {
+  return http.patch<Campaign>(`/companies/${companyId}/campaigns/${id}/toggle`).then((r) => r.data)
+}
+function deleteCampaign(companyId: string, id: string) {
+  return http.delete(`/companies/${companyId}/campaigns/${id}`)
+}
+function fetchCampaignMedia(companyId: string, id: string) {
+  return http.get<CampaignMedia[]>(`/companies/${companyId}/campaigns/${id}/media`).then((r) => r.data)
+}
+function addCampaignMedia(companyId: string, id: string, data: Partial<CampaignMedia>) {
+  return http.post<CampaignMedia>(`/companies/${companyId}/campaigns/${id}/media`, data).then((r) => r.data)
+}
+function removeCampaignMedia(companyId: string, id: string, mediaId: string) {
+  return http.delete(`/companies/${companyId}/campaigns/${id}/media/${mediaId}`)
+}
+function fetchCampaignStats(companyId: string, id: string) {
+  return http.get<CampaignStats>(`/companies/${companyId}/campaigns/${id}/stats`).then((r) => r.data)
+}
 
 export const campaignKeys = {
   all: (companyId: string) => ['campaigns', companyId] as const,
@@ -12,7 +40,7 @@ export const campaignKeys = {
 export function useCampaigns(companyId: string) {
   return useQuery({
     queryKey: campaignKeys.all(companyId),
-    queryFn: () => campaignsApi.list(companyId),
+    queryFn: () => fetchCampaigns(companyId),
     enabled: !!companyId,
   })
 }
@@ -20,7 +48,7 @@ export function useCampaigns(companyId: string) {
 export function useCampaignMedia(companyId: string, campaignId: string) {
   return useQuery({
     queryKey: campaignKeys.media(companyId, campaignId),
-    queryFn: () => campaignsApi.listMedia(companyId, campaignId),
+    queryFn: () => fetchCampaignMedia(companyId, campaignId),
     enabled: !!companyId && !!campaignId,
   })
 }
@@ -28,7 +56,7 @@ export function useCampaignMedia(companyId: string, campaignId: string) {
 export function useCampaignStats(companyId: string, campaignId: string) {
   return useQuery({
     queryKey: campaignKeys.stats(companyId, campaignId),
-    queryFn: () => campaignsApi.stats(companyId, campaignId),
+    queryFn: () => fetchCampaignStats(companyId, campaignId),
     enabled: !!companyId && !!campaignId,
   })
 }
@@ -36,7 +64,7 @@ export function useCampaignStats(companyId: string, campaignId: string) {
 export function useCreateCampaign(companyId: string) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (name: string) => campaignsApi.create(companyId, name),
+    mutationFn: (name: string) => createCampaign(companyId, name),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: campaignKeys.all(companyId) })
       toast.success('Campanha criada!')
@@ -49,7 +77,7 @@ export function useUpdateCampaign(companyId: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, name }: { id: string; name: string }) =>
-      campaignsApi.update(companyId, id, name),
+      updateCampaign(companyId, id, name),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: campaignKeys.all(companyId) })
       toast.success('Campanha atualizada!')
@@ -61,7 +89,7 @@ export function useUpdateCampaign(companyId: string) {
 export function useToggleCampaign(companyId: string) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (id: string) => campaignsApi.toggle(companyId, id),
+    mutationFn: (id: string) => toggleCampaign(companyId, id),
     onSuccess: () => qc.invalidateQueries({ queryKey: campaignKeys.all(companyId) }),
     onError: () => toast.error('Erro ao alterar status da campanha.'),
   })
@@ -70,7 +98,7 @@ export function useToggleCampaign(companyId: string) {
 export function useDeleteCampaign(companyId: string) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (id: string) => campaignsApi.delete(companyId, id),
+    mutationFn: (id: string) => deleteCampaign(companyId, id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: campaignKeys.all(companyId) })
       toast.success('Campanha removida.')
@@ -83,7 +111,7 @@ export function useAddCampaignMedia(companyId: string, campaignId: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: Partial<CampaignMedia>) =>
-      campaignsApi.addMedia(companyId, campaignId, data),
+      addCampaignMedia(companyId, campaignId, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: campaignKeys.media(companyId, campaignId) })
       toast.success('Mídia adicionada!')
@@ -96,7 +124,7 @@ export function useRemoveCampaignMedia(companyId: string, campaignId: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (mediaId: string) =>
-      campaignsApi.removeMedia(companyId, campaignId, mediaId),
+      removeCampaignMedia(companyId, campaignId, mediaId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: campaignKeys.media(companyId, campaignId) })
       toast.success('Mídia removida.')

@@ -1,8 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useQuery } from '@tanstack/react-query'
-import { paymentGatewayApi } from '@/services/api'
+import { usePaymentGateways } from '@/hooks/useIntegrations'
 import { CheckCircle2, AlertTriangle, ChevronRight, CreditCard } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { PaymentGatewayConfig } from '@/types'
@@ -31,11 +30,7 @@ const GATEWAY_CATALOG = [
 ]
 
 export default function GatewaysPage() {
-  const { data: gateways = [] } = useQuery<PaymentGatewayConfig[]>({
-    queryKey: ['payment-gateway'],
-    queryFn:  () => paymentGatewayApi.list().catch((e: { response?: { status?: number } }) =>
-      e?.response?.status === 404 ? [] : Promise.reject(e)),
-  })
+  const { data: gateways = [] } = usePaymentGateways()
 
   const activeGateway = gateways.find(g => g.isActive)
   const hasAny = gateways.length > 0

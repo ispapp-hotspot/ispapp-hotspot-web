@@ -4,8 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { companiesApi } from '@/services/api'
+import { useCreateCompany } from '@/hooks/useCompanies'
 import { useCompanyStore } from '@/store/company'
 import { toast } from 'sonner'
 import { ShieldCheck, Building2, Loader2 } from 'lucide-react'
@@ -31,7 +30,6 @@ const labelCls = 'text-xs uppercase tracking-wider text-neutral-400 mb-1.5 block
 
 export default function OnboardingPage() {
   const router = useRouter()
-  const qc = useQueryClient()
   const setActiveCompany = useCompanyStore((s) => s.setActiveCompany)
 
   const {
@@ -47,16 +45,7 @@ export default function OnboardingPage() {
 
   const selectedType = watch('type')
 
-  const create = useMutation({
-    mutationFn: (data: Partial<Company>) => companiesApi.create(data),
-    onSuccess: (company) => {
-      qc.invalidateQueries({ queryKey: ['companies'] })
-      setActiveCompany(company)
-      toast.success(`${company.name} criada com sucesso!`)
-      router.push('/dashboard')
-    },
-    onError: () => toast.error('Erro ao criar empresa. Tente novamente.'),
-  })
+  const create = useCreateCompany()
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#0C1117] text-white font-sans px-4">
@@ -83,7 +72,7 @@ export default function OnboardingPage() {
             Você precisará de pelo menos uma empresa para gerenciar dispositivos e portais.
           </p>
 
-          <form onSubmit={handleSubmit((data) => create.mutate(data))} className="space-y-5">
+          <form onSubmit={handleSubmit((data) => create.mutate(data, { onSuccess: (company) => { setActiveCompany(company); router.push('/dashboard') } }))} className="space-y-5">
             <div>
               <label className={labelCls}>Nome da empresa</label>
               <input

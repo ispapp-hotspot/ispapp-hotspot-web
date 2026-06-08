@@ -1,8 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { companiesApi } from '@/services/api'
+import { useCompanies, useCreateCompany, useUpdateCompany, useDeleteCompany } from '@/hooks/useCompanies'
 import { toast } from 'sonner'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -103,47 +102,16 @@ function CompanyForm({
 }
 
 export default function CompaniesPage() {
-  const qc = useQueryClient()
   const [modal, setModal] = useState<'create' | { edit: Company } | null>(null)
 
-  const { data: companies = [], isLoading } = useQuery({
-    queryKey: ['companies'],
-    queryFn: companiesApi.list,
-  })
-
-  const create = useMutation({
-    mutationFn: (data: Partial<Company>) => companiesApi.create(data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['companies'] })
-      toast.success('Empresa criada!')
-      setModal(null)
-    },
-    onError: () => toast.error('Erro ao criar empresa'),
-  })
-
-  const update = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<Company> }) =>
-      companiesApi.update(id, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['companies'] })
-      toast.success('Empresa atualizada!')
-      setModal(null)
-    },
-    onError: () => toast.error('Erro ao atualizar empresa'),
-  })
-
-  const remove = useMutation({
-    mutationFn: (id: string) => companiesApi.delete(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['companies'] })
-      toast.success('Empresa removida')
-    },
-    onError: () => toast.error('Erro ao remover empresa'),
-  })
+  const { data: companies = [], isLoading } = useCompanies()
+  const create = useCreateCompany()
+  const update = useUpdateCompany()
+  const remove = useDeleteCompany()
 
   function confirmDelete(company: Company) {
     if (confirm(`Remover "${company.name}"? Esta ação não pode ser desfeita.`)) {
-      remove.mutate(company.id)
+      remove.mutate(company.id, { onSuccess: () => toast.success('Empresa removida') })
     }
   }
 
@@ -229,7 +197,7 @@ export default function CompaniesPage() {
       {modal === 'create' && (
         <Modal title="Nova Empresa" onClose={() => setModal(null)}>
           <CompanyForm
-            onSubmit={(data) => create.mutate(data)}
+            onSubmit={(data) => create.mutate(data, { onSuccess: () => setModal(null) })}
             isPending={create.isPending}
           />
         </Modal>
@@ -239,7 +207,7 @@ export default function CompaniesPage() {
         <Modal title="Editar Empresa" onClose={() => setModal(null)}>
           <CompanyForm
             defaultValues={{ name: modal.edit.name, type: modal.edit.type, cnpj: modal.edit.cnpj }}
-            onSubmit={(data) => update.mutate({ id: modal.edit.id, data })}
+            onSubmit={(data) => update.mutate({ id: modal.edit.id, data }, { onSuccess: () => setModal(null) })}
             isPending={update.isPending}
           />
         </Modal>

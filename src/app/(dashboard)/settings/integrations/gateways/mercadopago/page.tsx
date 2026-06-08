@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { paymentGatewayApi } from '@/services/api'
+import { usePaymentGateways, useActivateGateway, useUpsertGateway, useValidateGateway, useDeleteGateway } from '@/hooks/useIntegrations'
 import { toast } from 'sonner'
 import Link from 'next/link'
 import {
@@ -15,13 +14,12 @@ const inputCls = 'w-full h-11 px-3 rounded-lg bg-[#1a2130] border border-white/1
 const labelCls = 'text-xs uppercase tracking-wider text-neutral-400 mb-1.5 block'
 
 export default function MercadoPagoPage() {
-  const queryClient = useQueryClient()
-
-  const { data: gateways = [], isLoading } = useQuery({
-    queryKey: ['payment-gateway'],
-    queryFn:  () => paymentGatewayApi.list().catch((e: { response?: { status?: number } }) => e?.response?.status === 404 ? [] : Promise.reject(e)),
-  })
+  const { data: gateways = [], isLoading } = usePaymentGateways()
   const gateway = gateways.find(g => g.gatewayType === 'MERCADO_PAGO') ?? null
+
+  const activate  = useActivateGateway()
+  const save      = useUpsertGateway()
+  const { data: validateData, refetch: testCreds, isFetching: testPending } = useValidateGateway()
 
   const [copied, setCopied] = useState(false)
   const [publicKey,   setPublicKey]   = useState('')
@@ -36,48 +34,7 @@ export default function MercadoPagoPage() {
     }
   }, [gateway])
 
-  const activate = useMutation({
-    mutationFn: () => paymentGatewayApi.activate('MERCADO_PAGO'),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['payment-gateway'] })
-      toast.success('Mercado Pago definido como gateway ativo.')
-    },
-    onError: () => toast.error('Erro ao ativar gateway.'),
-  })
-
-  const save = useMutation({
-    mutationFn: (data: { publicKey: string; secretToken: string }) =>
-      paymentGatewayApi.upsert({ ...data, gatewayType: 'MERCADO_PAGO' }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['payment-gateway'] })
-      toast.success('Mercado Pago configurado com sucesso.')
-      setSecretToken('')
-    },
-    onError: () => toast.error('Erro ao salvar configuração.'),
-  })
-
-  const testCreds = useMutation({
-    mutationFn: () => paymentGatewayApi.validate(),
-    onSuccess: (data) => {
-      if (data.valid) {
-        toast.success(`Credenciais válidas! Conta: ${data.nickname ?? data.email ?? data.userId}`)
-      } else {
-        toast.error(`Credenciais inválidas: ${data.error ?? 'Resposta inesperada do MP'}`)
-      }
-    },
-    onError: () => toast.error('Erro ao testar credenciais.'),
-  })
-
-  const remove = useMutation({
-    mutationFn: () => paymentGatewayApi.delete('MERCADO_PAGO'),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['payment-gateway'] })
-      toast.success('Integração removida.')
-      setPublicKey('')
-      setSecretToken('')
-    },
-    onError: () => toast.error('Erro ao remover integração.'),
-  })
+  const remove = useDeleteGateway()
 
   function validate() {
     const errs: Record<string, string> = {}
@@ -90,7 +47,7 @@ export default function MercadoPagoPage() {
     const errs = validate()
     if (Object.keys(errs).length) { setErrors(errs); return }
     setErrors({})
-    save.mutate({ publicKey: publicKey.trim(), secretToken: secretToken.trim() })
+    save.mutate({ publicKey: publicKey.trim(), secretToken: secretToken.trim(), gatewayType: 'MERCADO_PAGO' }, { onSuccess: () => setSecretToken('') })
   }
 
   return (
@@ -130,7 +87,7 @@ export default function MercadoPagoPage() {
             </span>
           ) : gateway ? (
             <button
-              onClick={() => activate.mutate()}
+              onClick={() => activate.mutate('MERCADO_PAGO')}
               disabled={activate.isPending}
               className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-60 transition-all"
             >
@@ -226,18 +183,18 @@ export default function MercadoPagoPage() {
             </button>
             {gateway && (
               <button
-                onClick={() => testCreds.mutate()}
-                disabled={testCreds.isPending}
+                onClick={() => testCreds()}
+                disabled={testPending}
                 title="Testar credenciais no Mercado Pago"
                 className="h-11 px-4 border border-white/10 text-neutral-400 hover:bg-white/5 hover:text-white rounded-lg transition-all flex items-center gap-2 text-sm font-medium"
               >
-                {testCreds.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <FlaskConical className="w-4 h-4" />}
+                {testPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <FlaskConical className="w-4 h-4" />}
                 Testar
               </button>
             )}
             {gateway && (
               <button
-                onClick={() => { if (confirm('Remover integração com Mercado Pago?')) remove.mutate() }}
+                onClick={() => { if (confirm('Remover integração com Mercado Pago?')) remove.mutate('MERCADO_PAGO', { onSuccess: () => { setPublicKey(''); setSecretToken('') } }) }}
                 disabled={remove.isPending}
                 className="h-11 px-4 border border-red-500/30 text-red-400 hover:bg-red-500/10 rounded-lg transition-all flex items-center gap-2 text-sm font-medium"
               >

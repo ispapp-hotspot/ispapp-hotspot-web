@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { devicesApi, portalsApi } from '@/services/api'
+import { useDevices, useProvisionDevice, useUpdateDevice, useDeleteDevice, useAutoSetupDevice } from '@/hooks/useDevices'
+import { usePortals } from '@/hooks/usePortals'
 import { useCompanyStore } from '@/store/company'
 import { toast } from 'sonner'
 import { useForm } from 'react-hook-form'
@@ -117,38 +117,17 @@ function AddDeviceModal({ companyId, onClose, onAutoSetup }: {
   companyId: string; onClose: () => void
   onAutoSetup: (device: Device, conn: ConnectionDefaults) => void
 }) {
-  const qc = useQueryClient()
   const [result, setResult] = useState<{ provision: DeviceProvisionResult; conn: ConnectionDefaults } | null>(null)
   const [selectedType, setSelectedType] = useState<DeviceType>('mikrotik')
 
-  const { data: portals = [] } = useQuery({
-    queryKey: ['portals', companyId],
-    queryFn: () => portalsApi.list(companyId),
-    enabled: !!companyId,
-  })
+  const { data: portals = [] } = usePortals(companyId)
 
   const { register, handleSubmit, setValue, formState: { errors } } = useForm<AddDeviceForm>({
     resolver: zodResolver(addDeviceSchema),
     defaultValues: { type: 'mikrotik', routerosPort: 8728 },
   })
 
-  const provision = useMutation({
-    mutationFn: (data: AddDeviceForm) => devicesApi.provision(companyId, data.name, data.type),
-    onSuccess: (r, data) => {
-      setResult({
-        provision: r,
-        conn: {
-          routerosIp:       data.routerosIp,
-          routerosUser:     data.routerosUser,
-          routerosPassword: data.routerosPassword,
-          routerosPort:     data.routerosPort,
-          portalId:         data.portalId,
-        },
-      })
-      qc.invalidateQueries({ queryKey: ['devices', companyId] })
-    },
-    onError: () => toast.error('Erro ao provisionar dispositivo'),
-  })
+  const provision = useProvisionDevice(companyId)
 
   if (result) {
     return (
@@ -186,7 +165,10 @@ function AddDeviceModal({ companyId, onClose, onAutoSetup }: {
 
   return (
     <Modal title="Novo Dispositivo" onClose={onClose} maxWidth="max-w-md">
-      <form onSubmit={handleSubmit((d) => provision.mutate(d))} className="space-y-5">
+      <form onSubmit={handleSubmit((d) => provision.mutate(
+        { name: d.name, type: d.type },
+        { onSuccess: (r) => setResult({ provision: r, conn: { routerosIp: d.routerosIp, routerosUser: d.routerosUser, routerosPassword: d.routerosPassword, routerosPort: d.routerosPort, portalId: d.portalId } }) }
+      ))} className="space-y-5">
 
         {/* Nome */}
         <div>
@@ -287,13 +269,7 @@ function AutoSetupModal({ device, companyId, onClose, connDefaults }: {
   device: Device; companyId: string; onClose: () => void
   connDefaults?: ConnectionDefaults
 }) {
-  const qc = useQueryClient()
-
-  const { data: portals = [] } = useQuery({
-    queryKey: ['portals', companyId],
-    queryFn: () => portalsApi.list(companyId),
-    enabled: !!companyId,
-  })
+  const { data: portals = [] } = usePortals(companyId)
 
   const { register, handleSubmit, formState: { errors } } = useForm<AutoSetupForm>({
     resolver: zodResolver(autoSetupSchema),
@@ -307,21 +283,13 @@ function AutoSetupModal({ device, companyId, onClose, connDefaults }: {
     },
   })
 
-  const setup = useMutation({
-    mutationFn: (data: AutoSetupForm) => devicesApi.autoSetup(companyId, device.id, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['devices', companyId] })
-      toast.success('Auto Setup concluído!')
-      onClose()
-    },
-    onError: () => toast.error('Erro no Auto Setup. Verifique as credenciais.'),
-  })
+  const setup = useAutoSetupDevice(companyId)
 
   const typeLabel = (device as any).type === 'mikrotik' ? 'MikroTik RouterOS REST API v7' : 'API do dispositivo'
 
   return (
     <Modal title={`Auto Setup — ${device.name}`} onClose={onClose} maxWidth="max-w-md">
-      <form onSubmit={handleSubmit((d) => setup.mutate(d))} className="space-y-5">
+      <form onSubmit={handleSubmit((d) => setup.mutate({ deviceId: device.id, data: d }, { onSuccess: onClose }))} className="space-y-5">
 
         {/* Info do device */}
         <div className="bg-[#0C1117] border border-white/10 rounded-lg px-4 py-3 space-y-1">
@@ -457,13 +425,7 @@ type EditDeviceForm = z.infer<typeof editDeviceSchema>
 function EditDeviceModal({ device, companyId, onClose }: {
   device: Device; companyId: string; onClose: () => void
 }) {
-  const qc = useQueryClient()
-
-  const { data: portals = [] } = useQuery({
-    queryKey: ['portals', companyId],
-    queryFn: () => portalsApi.list(companyId),
-    enabled: !!companyId,
-  })
+  const { data: portals = [] } = usePortals(companyId)
 
   const { register, handleSubmit, formState: { errors } } = useForm<EditDeviceForm>({
     resolver: zodResolver(editDeviceSchema),
@@ -476,19 +438,11 @@ function EditDeviceModal({ device, companyId, onClose }: {
     },
   })
 
-  const update = useMutation({
-    mutationFn: (data: EditDeviceForm) => devicesApi.update(companyId, device.id, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['devices', companyId] })
-      toast.success('Dispositivo atualizado')
-      onClose()
-    },
-    onError: () => toast.error('Erro ao atualizar dispositivo'),
-  })
+  const update = useUpdateDevice(companyId)
 
   return (
     <Modal title="Editar Dispositivo" onClose={onClose} maxWidth="max-w-md">
-      <form onSubmit={handleSubmit((d) => update.mutate(d))} className="space-y-5">
+      <form onSubmit={handleSubmit((d) => update.mutate({ deviceId: device.id, data: d }, { onSuccess: onClose }))} className="space-y-5">
 
         {/* Nome */}
         <div>
@@ -546,25 +500,12 @@ function EditDeviceModal({ device, companyId, onClose }: {
 export default function DevicesPage() {
   const activeCompany = useCompanyStore((s) => s.activeCompany)
   const companyId = activeCompany?.id ?? ''
-  const qc = useQueryClient()
   const [modal, setModal] = useState<
     'add' | { edit: Device } | { autoSetup: Device; connDefaults?: ConnectionDefaults } | { delete: Device } | null
   >(null)
 
-  const { data: devices = [], isLoading } = useQuery({
-    queryKey: ['devices', companyId],
-    queryFn: () => devicesApi.list(companyId),
-    enabled: !!companyId,
-  })
-
-  const remove = useMutation({
-    mutationFn: (deviceId: string) => devicesApi.delete(companyId, deviceId),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['devices', companyId] })
-      toast.success('Dispositivo removido')
-    },
-    onError: () => toast.error('Erro ao remover dispositivo'),
-  })
+  const { data: devices = [], isLoading } = useDevices(companyId)
+  const remove = useDeleteDevice(companyId)
 
 
   if (!activeCompany) {

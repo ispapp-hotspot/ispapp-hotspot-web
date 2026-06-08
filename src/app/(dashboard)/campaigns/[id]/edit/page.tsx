@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, use } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { campaignsApi } from '@/services/api'
+import { useCampaigns, useUpdateCampaign, useCampaignMedia, useAddCampaignMedia, useRemoveCampaignMedia } from '@/hooks/useCampaigns'
 import { useCompanyStore } from '@/store/company'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -16,7 +15,6 @@ const inputCls = 'w-full h-10 px-3 rounded-lg bg-[#1a2130] border border-white/1
 export default function CampaignEditPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router        = useRouter()
-  const qc            = useQueryClient()
   const activeCompany = useCompanyStore(s => s.activeCompany)
   const companyId     = activeCompany?.id ?? ''
 
@@ -26,49 +24,14 @@ export default function CampaignEditPage({ params }: { params: Promise<{ id: str
   const [mediaType, setMediaType]     = useState<'image' | 'video'>('image')
   const [mediaDur, setMediaDur]       = useState(5)
 
-  const { data: campaigns = [] } = useQuery({
-    queryKey: ['campaigns', companyId],
-    queryFn: () => campaignsApi.list(companyId),
-    enabled: !!companyId,
-  })
+  const { data: campaigns = [] } = useCampaigns(companyId)
   const campaign = campaigns.find(c => c.id === id)
 
-  const { data: media = [], isLoading: mediaLoading } = useQuery({
-    queryKey: ['campaign-media', id],
-    queryFn: () => campaignsApi.listMedia(companyId, id),
-    enabled: !!companyId && !!id,
-  })
+  const { data: media = [], isLoading: mediaLoading } = useCampaignMedia(companyId, id)
 
-  const updateName = useMutation({
-    mutationFn: () => campaignsApi.update(companyId, id, editName.trim()),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['campaigns', companyId] })
-      setEditingName(false)
-      toast.success('Nome atualizado')
-    },
-    onError: () => toast.error('Erro ao atualizar nome'),
-  })
-
-  const addMedia = useMutation({
-    mutationFn: () => campaignsApi.addMedia(companyId, id, {
-      url: mediaUrl.trim(),
-      type: mediaType,
-      durationSec: mediaDur,
-      sortOrder: media.length,
-    }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['campaign-media', id] })
-      setMediaUrl('')
-      toast.success('Mídia adicionada')
-    },
-    onError: () => toast.error('Erro ao adicionar mídia'),
-  })
-
-  const removeMedia = useMutation({
-    mutationFn: (mediaId: string) => campaignsApi.removeMedia(companyId, id, mediaId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['campaign-media', id] }),
-    onError: () => toast.error('Erro ao remover mídia'),
-  })
+  const updateName  = useUpdateCampaign(companyId)
+  const addMedia    = useAddCampaignMedia(companyId, id)
+  const removeMedia = useRemoveCampaignMedia(companyId, id)
 
   if (!activeCompany) return null
 
@@ -101,12 +64,12 @@ export default function CampaignEditPage({ params }: { params: Promise<{ id: str
               className={cn(inputCls, 'border-emerald-500/50')}
               autoFocus
               onKeyDown={e => {
-                if (e.key === 'Enter' && editName.trim()) updateName.mutate()
+                if (e.key === 'Enter' && editName.trim()) updateName.mutate({ id, name: editName.trim() }, { onSuccess: () => setEditingName(false) })
                 if (e.key === 'Escape') setEditingName(false)
               }}
             />
             <button
-              onClick={() => updateName.mutate()}
+              onClick={() => updateName.mutate({ id, name: editName.trim() }, { onSuccess: () => setEditingName(false) })}
               disabled={!editName.trim() || updateName.isPending}
               className="w-10 h-10 flex items-center justify-center bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg disabled:opacity-50 shrink-0"
             >
@@ -215,7 +178,7 @@ export default function CampaignEditPage({ params }: { params: Promise<{ id: str
             onChange={e => setMediaUrl(e.target.value)}
             className={inputCls}
             placeholder="URL da imagem ou vídeo (https://...)"
-            onKeyDown={e => e.key === 'Enter' && mediaUrl.trim() && addMedia.mutate()}
+            onKeyDown={e => e.key === 'Enter' && mediaUrl.trim() && addMedia.mutate({ url: mediaUrl.trim(), type: mediaType, durationSec: mediaDur, sortOrder: media.length }, { onSuccess: () => setMediaUrl('') })}
           />
 
           <div className="flex items-center gap-3">
@@ -226,7 +189,7 @@ export default function CampaignEditPage({ params }: { params: Promise<{ id: str
               className="w-20 h-9 px-3 rounded-lg bg-[#1a2130] border border-white/10 text-white text-sm outline-none"
             />
             <button
-              onClick={() => addMedia.mutate()}
+              onClick={() => addMedia.mutate({ url: mediaUrl.trim(), type: mediaType, durationSec: mediaDur, sortOrder: media.length }, { onSuccess: () => setMediaUrl('') })}
               disabled={!mediaUrl.trim() || addMedia.isPending}
               className="flex-1 h-9 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg disabled:opacity-50 transition-colors"
             >

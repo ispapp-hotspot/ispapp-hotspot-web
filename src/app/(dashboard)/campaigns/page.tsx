@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { campaignsApi } from '@/services/api'
+import { useCampaigns, useCreateCampaign, useToggleCampaign, useDeleteCampaign } from '@/hooks/useCampaigns'
 import { useCompanyStore } from '@/store/company'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -33,23 +32,9 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
 }
 
 function CampaignRow({ campaign, companyId }: { campaign: Campaign; companyId: string }) {
-  const qc     = useQueryClient()
   const router = useRouter()
-
-  const toggle = useMutation({
-    mutationFn: () => campaignsApi.toggle(companyId, campaign.id),
-    onSuccess:  () => qc.invalidateQueries({ queryKey: ['campaigns', companyId] }),
-    onError:    () => toast.error('Erro'),
-  })
-
-  const remove = useMutation({
-    mutationFn: () => campaignsApi.delete(companyId, campaign.id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['campaigns', companyId] })
-      toast.success('Campanha removida')
-    },
-    onError: () => toast.error('Erro ao remover'),
-  })
+  const toggle = useToggleCampaign(companyId)
+  const remove = useDeleteCampaign(companyId)
 
   return (
     <div className={cn(
@@ -88,7 +73,7 @@ function CampaignRow({ campaign, companyId }: { campaign: Campaign; companyId: s
           <BarChart2 className="w-3.5 h-3.5" /> Detalhes
         </button>
         <button
-          onClick={() => toggle.mutate()}
+          onClick={() => toggle.mutate(campaign.id)}
           disabled={toggle.isPending}
           title={campaign.active ? 'Desativar' : 'Ativar'}
           className={cn(
@@ -99,7 +84,7 @@ function CampaignRow({ campaign, companyId }: { campaign: Campaign; companyId: s
           {toggle.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : campaign.active ? <Power className="w-4 h-4" /> : <PowerOff className="w-4 h-4" />}
         </button>
         <button
-          onClick={() => { if (confirm(`Remover "${campaign.name}"?`)) remove.mutate() }}
+          onClick={() => { if (confirm(`Remover "${campaign.name}"?`)) remove.mutate(campaign.id) }}
           className="p-2 text-neutral-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
         >
           <Trash2 className="w-4 h-4" />
@@ -112,26 +97,11 @@ function CampaignRow({ campaign, companyId }: { campaign: Campaign; companyId: s
 export default function CampaignsPage() {
   const activeCompany = useCompanyStore(s => s.activeCompany)
   const companyId     = activeCompany?.id ?? ''
-  const qc            = useQueryClient()
   const [creating, setCreating] = useState(false)
   const [newName, setNewName]   = useState('')
 
-  const { data: campaigns = [], isLoading } = useQuery({
-    queryKey: ['campaigns', companyId],
-    queryFn: () => campaignsApi.list(companyId),
-    enabled: !!companyId,
-  })
-
-  const create = useMutation({
-    mutationFn: () => campaignsApi.create(companyId, newName.trim()),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['campaigns', companyId] })
-      toast.success('Campanha criada')
-      setNewName('')
-      setCreating(false)
-    },
-    onError: () => toast.error('Erro ao criar campanha'),
-  })
+  const { data: campaigns = [], isLoading } = useCampaigns(companyId)
+  const create = useCreateCampaign(companyId)
 
   if (!activeCompany) return (
     <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -195,11 +165,11 @@ export default function CampaignsPage() {
               <input
                 value={newName} onChange={e => setNewName(e.target.value)}
                 className={inputCls} placeholder="Ex: Promoção Junho 2026" autoFocus
-                onKeyDown={e => e.key === 'Enter' && newName.trim() && create.mutate()}
+                onKeyDown={e => e.key === 'Enter' && newName.trim() && create.mutate(newName.trim(), { onSuccess: () => { setNewName(''); setCreating(false) } })}
               />
             </div>
             <button
-              onClick={() => create.mutate()}
+              onClick={() => create.mutate(newName.trim(), { onSuccess: () => { setNewName(''); setCreating(false) } })}
               disabled={!newName.trim() || create.isPending}
               className="w-full h-10 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg disabled:opacity-50 transition-colors"
             >

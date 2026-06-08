@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { useQuery } from '@tanstack/react-query'
-import { companiesApi } from '@/services/api'
+import { useCompanies } from '@/hooks/useCompanies'
 import { ShieldCheck } from 'lucide-react'
 
 function Spinner() {
@@ -21,11 +20,7 @@ export function OnboardingGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [redirecting, setRedirecting] = useState(false)
 
-  const { data: companies, isLoading, isError } = useQuery({
-    queryKey: ['companies'],
-    queryFn: companiesApi.list,
-    retry: 1,
-  })
+  const { data: companies, isLoading, isError } = useCompanies()
 
   useEffect(() => {
     if (isLoading || isError) return

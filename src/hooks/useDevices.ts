@@ -1,6 +1,31 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { devicesApi } from '@/services/api'
+import http from '@/lib/http'
+import type { Device, DeviceProvisionResult } from '@/types'
+
+function fetchDevices(companyId: string) {
+  return http.get<Device[]>(`/companies/${companyId}/devices`).then((r) => r.data)
+}
+function fetchDevice(companyId: string, deviceId: string) {
+  return http.get<Device>(`/companies/${companyId}/devices/${deviceId}`).then((r) => r.data)
+}
+function provisionDevice(companyId: string, name: string, type = 'mikrotik') {
+  return http.post<DeviceProvisionResult>(`/companies/${companyId}/devices`, { name, type }).then((r) => r.data)
+}
+function updateDevice(companyId: string, deviceId: string, data: {
+  name: string; routerosIp?: string; routerosPort?: number; routerosUser?: string; portalId?: string
+}) {
+  return http.put<Device>(`/companies/${companyId}/devices/${deviceId}`, data).then((r) => r.data)
+}
+function autoSetupDevice(companyId: string, deviceId: string, payload: {
+  routerosIp: string; routerosUser: string; routerosPassword: string
+  routerosPort: number; hotspotInterface: string; portalId: string
+}) {
+  return http.post(`/companies/${companyId}/devices/${deviceId}/auto-setup`, payload).then((r) => r.data)
+}
+function deleteDevice(companyId: string, deviceId: string) {
+  return http.delete(`/companies/${companyId}/devices/${deviceId}`)
+}
 
 export const deviceKeys = {
   all: (companyId: string) => ['devices', companyId] as const,
@@ -10,7 +35,7 @@ export const deviceKeys = {
 export function useDevices(companyId: string) {
   return useQuery({
     queryKey: deviceKeys.all(companyId),
-    queryFn: () => devicesApi.list(companyId),
+    queryFn: () => fetchDevices(companyId),
     enabled: !!companyId,
   })
 }
@@ -18,7 +43,7 @@ export function useDevices(companyId: string) {
 export function useDevice(companyId: string, deviceId: string) {
   return useQuery({
     queryKey: deviceKeys.one(companyId, deviceId),
-    queryFn: () => devicesApi.get(companyId, deviceId),
+    queryFn: () => fetchDevice(companyId, deviceId),
     enabled: !!companyId && !!deviceId,
   })
 }
@@ -27,7 +52,7 @@ export function useProvisionDevice(companyId: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ name, type }: { name: string; type?: string }) =>
-      devicesApi.provision(companyId, name, type),
+      provisionDevice(companyId, name, type),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: deviceKeys.all(companyId) })
       toast.success('Dispositivo provisionado!')
@@ -42,7 +67,7 @@ export function useUpdateDevice(companyId: string) {
     mutationFn: ({ deviceId, data }: {
       deviceId: string
       data: { name: string; routerosIp?: string; routerosPort?: number; routerosUser?: string; portalId?: string }
-    }) => devicesApi.update(companyId, deviceId, data),
+    }) => updateDevice(companyId, deviceId, data),
     onSuccess: (_, { deviceId }) => {
       qc.invalidateQueries({ queryKey: deviceKeys.all(companyId) })
       qc.invalidateQueries({ queryKey: deviceKeys.one(companyId, deviceId) })
@@ -55,11 +80,30 @@ export function useUpdateDevice(companyId: string) {
 export function useDeleteDevice(companyId: string) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (deviceId: string) => devicesApi.delete(companyId, deviceId),
+    mutationFn: (deviceId: string) => deleteDevice(companyId, deviceId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: deviceKeys.all(companyId) })
       toast.success('Dispositivo removido.')
     },
     onError: () => toast.error('Erro ao remover dispositivo.'),
+  })
+}
+
+export function useAutoSetupDevice(companyId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ deviceId, data }: {
+      deviceId: string
+      data: {
+        routerosIp: string; routerosUser: string; routerosPassword: string
+        routerosPort: number; hotspotInterface: string; portalId: string
+      }
+    }) => autoSetupDevice(companyId, deviceId, data),
+    onSuccess: (_, { deviceId }) => {
+      qc.invalidateQueries({ queryKey: deviceKeys.all(companyId) })
+      qc.invalidateQueries({ queryKey: deviceKeys.one(companyId, deviceId) })
+      toast.success('Auto Setup concluído!')
+    },
+    onError: () => toast.error('Erro no Auto Setup. Verifique as credenciais.'),
   })
 }

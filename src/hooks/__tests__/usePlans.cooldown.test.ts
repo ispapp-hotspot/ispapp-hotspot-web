@@ -3,19 +3,18 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { createTestQueryClient } from '@/test/utils'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { createElement } from 'react'
+import http from '@/lib/http'
 import { useCreatePlan, useUpdatePlan } from '../usePlans'
-import * as api from '@/services/api'
 import type { HotspotPlan } from '@/types'
 
-vi.mock('@/services/api', () => ({
-  plansApi: {
-    list: vi.fn(),
-    create: vi.fn(),
-    update: vi.fn(),
-    toggle: vi.fn(),
+vi.mock('@/lib/http', () => ({
+  default: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    patch: vi.fn(),
     delete: vi.fn(),
   },
-  vouchersApi: {},
 }))
 
 vi.mock('sonner', () => ({
@@ -47,62 +46,59 @@ describe('useCreatePlan — carência (cooldownDays)', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('cria plano gratuito sem carência quando cooldownDays é null', async () => {
-    const plan = { ...freePlanBase, cooldownDays: null }
-    vi.mocked(api.plansApi.create).mockResolvedValue(plan)
+    vi.mocked(http.post).mockResolvedValue({ data: { ...freePlanBase, cooldownDays: null } })
 
     const { result } = renderHook(() => useCreatePlan(COMPANY_ID), { wrapper: wrapper() })
 
     result.current.mutate({ name: 'Acesso gratuito', isFree: true, price: 0, durationMin: 60, cooldownDays: null })
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    expect(api.plansApi.create).toHaveBeenCalledWith(
-      COMPANY_ID,
-      expect.objectContaining({ cooldownDays: null })
+    expect(http.post).toHaveBeenCalledWith(
+      `/companies/${COMPANY_ID}/plans`,
+      expect.objectContaining({ cooldownDays: null }),
     )
   })
 
   it('cria plano gratuito com carência de 1 dia', async () => {
-    const plan = { ...freePlanBase, cooldownDays: 1 }
-    vi.mocked(api.plansApi.create).mockResolvedValue(plan)
+    vi.mocked(http.post).mockResolvedValue({ data: { ...freePlanBase, cooldownDays: 1 } })
 
     const { result } = renderHook(() => useCreatePlan(COMPANY_ID), { wrapper: wrapper() })
 
     result.current.mutate({ name: 'Acesso gratuito', isFree: true, price: 0, durationMin: 60, cooldownDays: 1 })
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    expect(api.plansApi.create).toHaveBeenCalledWith(
-      COMPANY_ID,
-      expect.objectContaining({ isFree: true, cooldownDays: 1 })
+    expect(http.post).toHaveBeenCalledWith(
+      `/companies/${COMPANY_ID}/plans`,
+      expect.objectContaining({ isFree: true, cooldownDays: 1 }),
     )
   })
 
   it('cria plano gratuito com carência de 7 dias', async () => {
-    const plan = { ...freePlanBase, cooldownDays: 7 }
-    vi.mocked(api.plansApi.create).mockResolvedValue(plan)
+    vi.mocked(http.post).mockResolvedValue({ data: { ...freePlanBase, cooldownDays: 7 } })
 
     const { result } = renderHook(() => useCreatePlan(COMPANY_ID), { wrapper: wrapper() })
 
     result.current.mutate({ name: 'Acesso semanal', isFree: true, price: 0, durationMin: 120, cooldownDays: 7 })
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    expect(api.plansApi.create).toHaveBeenCalledWith(
-      COMPANY_ID,
-      expect.objectContaining({ cooldownDays: 7 })
+    expect(http.post).toHaveBeenCalledWith(
+      `/companies/${COMPANY_ID}/plans`,
+      expect.objectContaining({ cooldownDays: 7 }),
     )
   })
 
   it('plano pago ignora cooldownDays (deve ser null)', async () => {
     const paidPlan: HotspotPlan = { ...freePlanBase, id: 'plan-paid', isFree: false, price: 10, cooldownDays: null }
-    vi.mocked(api.plansApi.create).mockResolvedValue(paidPlan)
+    vi.mocked(http.post).mockResolvedValue({ data: paidPlan })
 
     const { result } = renderHook(() => useCreatePlan(COMPANY_ID), { wrapper: wrapper() })
 
     result.current.mutate({ name: 'Plano pago', isFree: false, price: 10, durationMin: 60, cooldownDays: null })
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    expect(api.plansApi.create).toHaveBeenCalledWith(
-      COMPANY_ID,
-      expect.objectContaining({ isFree: false, cooldownDays: null })
+    expect(http.post).toHaveBeenCalledWith(
+      `/companies/${COMPANY_ID}/plans`,
+      expect.objectContaining({ isFree: false, cooldownDays: null }),
     )
   })
 })
@@ -111,34 +107,30 @@ describe('useUpdatePlan — carência (cooldownDays)', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('atualiza carência de um plano gratuito existente', async () => {
-    const updated = { ...freePlanBase, cooldownDays: 3 }
-    vi.mocked(api.plansApi.update).mockResolvedValue(updated)
+    vi.mocked(http.put).mockResolvedValue({ data: { ...freePlanBase, cooldownDays: 3 } })
 
     const { result } = renderHook(() => useUpdatePlan(COMPANY_ID), { wrapper: wrapper() })
 
     result.current.mutate({ planId: freePlanBase.id, data: { cooldownDays: 3 } })
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    expect(api.plansApi.update).toHaveBeenCalledWith(
-      COMPANY_ID,
-      freePlanBase.id,
-      expect.objectContaining({ cooldownDays: 3 })
+    expect(http.put).toHaveBeenCalledWith(
+      `/companies/${COMPANY_ID}/plans/${freePlanBase.id}`,
+      expect.objectContaining({ cooldownDays: 3 }),
     )
   })
 
   it('remove carência ao setar cooldownDays para null', async () => {
-    const updated = { ...freePlanBase, cooldownDays: null }
-    vi.mocked(api.plansApi.update).mockResolvedValue(updated)
+    vi.mocked(http.put).mockResolvedValue({ data: { ...freePlanBase, cooldownDays: null } })
 
     const { result } = renderHook(() => useUpdatePlan(COMPANY_ID), { wrapper: wrapper() })
 
     result.current.mutate({ planId: freePlanBase.id, data: { cooldownDays: null } })
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    expect(api.plansApi.update).toHaveBeenCalledWith(
-      COMPANY_ID,
-      freePlanBase.id,
-      expect.objectContaining({ cooldownDays: null })
+    expect(http.put).toHaveBeenCalledWith(
+      `/companies/${COMPANY_ID}/plans/${freePlanBase.id}`,
+      expect.objectContaining({ cooldownDays: null }),
     )
   })
 })

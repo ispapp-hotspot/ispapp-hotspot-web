@@ -6,7 +6,7 @@ import { Eye, EyeOff, ShieldCheck, Loader2 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { authApi } from '@/services/api'
+import { useLogin } from '@/hooks/useAuth'
 import { useAuthStore } from '@/store/auth'
 import { toast } from 'sonner'
 
@@ -22,6 +22,7 @@ export default function LoginPage() {
   const router = useRouter()
   const setUser = useAuthStore((s) => s.setUser)
   const [showPass, setShowPass] = useState(false)
+  const login = useLogin()
 
   const {
     register,
@@ -31,7 +32,7 @@ export default function LoginPage() {
 
   async function onSubmit(data: FormData) {
     try {
-      const result = await authApi.login(data)
+      const result = await login.mutateAsync(data)
       setUser({ name: result.name, email: result.email, role: result.role })
       window.location.href = '/dashboard'
     } catch {

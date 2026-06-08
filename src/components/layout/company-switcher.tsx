@@ -1,8 +1,7 @@
 'use client'
 
 import { useRef, useState, useEffect } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { companiesApi } from '@/services/api'
+import { useCompanies } from '@/hooks/useCompanies'
 import { useCompanyStore } from '@/store/company'
 import { cn } from '@/lib/utils'
 import { Building2, ChevronsUpDown, Check, Plus } from 'lucide-react'
@@ -14,10 +13,7 @@ export function CompanySwitcher() {
 
   const { activeCompany, setActiveCompany } = useCompanyStore()
 
-  const { data: companies = [] } = useQuery({
-    queryKey: ['companies'],
-    queryFn: companiesApi.list,
-  })
+  const { data: companies = [] } = useCompanies()
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {

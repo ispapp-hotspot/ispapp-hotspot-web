@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { integrationApi } from '@/services/api'
+import { useIspIntegration, useUpsertIspIntegration, useDeleteIspIntegration } from '@/hooks/useIntegrations'
 import type { ErpType } from '@/types'
 import { toast } from 'sonner'
 import {
@@ -22,15 +21,9 @@ const inputCls = 'w-full h-11 px-3 rounded-lg bg-[#1a2130] border border-white/1
 const labelCls = 'text-xs uppercase tracking-wider text-neutral-400 mb-1.5 block'
 
 export default function IntegrationsPage() {
-  const queryClient = useQueryClient()
-
-  const { data: integration, isLoading } = useQuery({
-    queryKey: ['isp-integration'],
-    queryFn: () => integrationApi.get().catch((err: any) => {
-      if (err?.response?.status === 404) return null
-      throw err
-    }),
-  })
+  const { data: integration, isLoading } = useIspIntegration()
+  const upsert = useUpsertIspIntegration()
+  const remove = useDeleteIspIntegration()
 
   const [erpType,   setErpType]   = useState<ErpType | ''>('')
   const [baseUrl,   setBaseUrl]   = useState('')
@@ -45,29 +38,6 @@ export default function IntegrationsPage() {
       setToken('')
     }
   }, [integration])
-
-  const upsert = useMutation({
-    mutationFn: (data: { erpType: ErpType; baseUrl: string; token: string }) =>
-      integrationApi.upsert(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['isp-integration'] })
-      toast.success('Integração salva com sucesso.')
-      setToken('')
-    },
-    onError: () => toast.error('Erro ao salvar integração.'),
-  })
-
-  const remove = useMutation({
-    mutationFn: () => integrationApi.delete(),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['isp-integration'] })
-      toast.success('Integração removida.')
-      setErpType('')
-      setBaseUrl('')
-      setToken('')
-    },
-    onError: () => toast.error('Erro ao remover integração.'),
-  })
 
   function validate() {
     const errs: Record<string, string> = {}
@@ -211,7 +181,7 @@ export default function IntegrationsPage() {
             </button>
             {integration && (
               <button
-                onClick={() => { if (confirm('Remover a integração ERP?')) remove.mutate() }}
+                onClick={() => { if (confirm('Remover a integração ERP?')) remove.mutate(undefined, { onSuccess: () => { setErpType(''); setBaseUrl(''); setToken('') } }) }}
                 disabled={remove.isPending}
                 className="h-11 px-4 border border-red-500/30 text-red-400 hover:bg-red-500/10 rounded-lg transition-all flex items-center gap-2 text-sm font-medium"
               >

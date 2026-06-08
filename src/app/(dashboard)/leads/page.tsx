@@ -1,8 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { portalsApi } from '@/services/api'
+import { useAllLeads, usePortals } from '@/hooks/usePortals'
 import { useCompanyStore } from '@/store/company'
 import { Users, Download, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { HotspotLead } from '@/types'
@@ -29,17 +28,8 @@ export default function LeadsPage() {
   const [search, setSearch] = useState('')
   const [page,   setPage]   = useState(0)
 
-  const { data: leads = [], isLoading } = useQuery({
-    queryKey: ['leads-all', companyId],
-    queryFn: () => portalsApi.allLeads(companyId),
-    enabled: !!companyId,
-  })
-
-  const { data: portals = [] } = useQuery({
-    queryKey: ['portals', companyId],
-    queryFn: () => portalsApi.list(companyId),
-    enabled: !!companyId,
-  })
+  const { data: leads = [], isLoading } = useAllLeads(companyId)
+  const { data: portals = [] } = usePortals(companyId)
 
   const portalMap = Object.fromEntries(portals.map(p => [p.id, p.name]))
 

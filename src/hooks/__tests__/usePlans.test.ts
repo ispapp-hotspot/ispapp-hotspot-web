@@ -3,19 +3,18 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { createTestQueryClient } from '@/test/utils'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { createElement } from 'react'
+import http from '@/lib/http'
 import { usePlans, useCreatePlan, useDeletePlan, useTogglePlan } from '../usePlans'
-import * as api from '@/services/api'
 import type { HotspotPlan } from '@/types'
 
-vi.mock('@/services/api', () => ({
-  plansApi: {
-    list: vi.fn(),
-    create: vi.fn(),
-    update: vi.fn(),
-    toggle: vi.fn(),
+vi.mock('@/lib/http', () => ({
+  default: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    patch: vi.fn(),
     delete: vi.fn(),
   },
-  vouchersApi: {},
 }))
 
 vi.mock('sonner', () => ({
@@ -47,19 +46,19 @@ describe('usePlans', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('fetches plans for a company', async () => {
-    vi.mocked(api.plansApi.list).mockResolvedValue([mockPlan])
+    vi.mocked(http.get).mockResolvedValue({ data: [mockPlan] })
 
     const { result } = renderHook(() => usePlans(COMPANY_ID), { wrapper: wrapper() })
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(result.current.data).toEqual([mockPlan])
-    expect(api.plansApi.list).toHaveBeenCalledWith(COMPANY_ID)
+    expect(http.get).toHaveBeenCalledWith(`/companies/${COMPANY_ID}/plans`)
   })
 
   it('does not fetch when companyId is empty', () => {
     const { result } = renderHook(() => usePlans(''), { wrapper: wrapper() })
     expect(result.current.fetchStatus).toBe('idle')
-    expect(api.plansApi.list).not.toHaveBeenCalled()
+    expect(http.get).not.toHaveBeenCalled()
   })
 })
 
@@ -68,20 +67,23 @@ describe('useCreatePlan', () => {
 
   it('creates a plan and shows success toast', async () => {
     const { toast } = await import('sonner')
-    vi.mocked(api.plansApi.create).mockResolvedValue(mockPlan)
+    vi.mocked(http.post).mockResolvedValue({ data: mockPlan })
 
     const { result } = renderHook(() => useCreatePlan(COMPANY_ID), { wrapper: wrapper() })
 
     result.current.mutate({ name: 'Plano 1h', isFree: false, price: 5, durationMin: 60 })
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    expect(api.plansApi.create).toHaveBeenCalledWith(COMPANY_ID, expect.objectContaining({ name: 'Plano 1h' }))
+    expect(http.post).toHaveBeenCalledWith(
+      `/companies/${COMPANY_ID}/plans`,
+      expect.objectContaining({ name: 'Plano 1h' }),
+    )
     expect(toast.success).toHaveBeenCalledWith('Plano criado com sucesso!')
   })
 
   it('shows error toast on failure', async () => {
     const { toast } = await import('sonner')
-    vi.mocked(api.plansApi.create).mockRejectedValue(new Error('Server error'))
+    vi.mocked(http.post).mockRejectedValue(new Error('Server error'))
 
     const { result } = renderHook(() => useCreatePlan(COMPANY_ID), { wrapper: wrapper() })
 
@@ -97,14 +99,14 @@ describe('useDeletePlan', () => {
 
   it('deletes a plan and shows success toast', async () => {
     const { toast } = await import('sonner')
-    vi.mocked(api.plansApi.delete).mockResolvedValue(undefined as any)
+    vi.mocked(http.delete).mockResolvedValue({})
 
     const { result } = renderHook(() => useDeletePlan(COMPANY_ID), { wrapper: wrapper() })
 
     result.current.mutate('plan-1')
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    expect(api.plansApi.delete).toHaveBeenCalledWith(COMPANY_ID, 'plan-1')
+    expect(http.delete).toHaveBeenCalledWith(`/companies/${COMPANY_ID}/plans/plan-1`)
     expect(toast.success).toHaveBeenCalledWith('Plano removido.')
   })
 })
@@ -113,13 +115,13 @@ describe('useTogglePlan', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('toggles plan status', async () => {
-    vi.mocked(api.plansApi.toggle).mockResolvedValue({ ...mockPlan, active: false })
+    vi.mocked(http.patch).mockResolvedValue({ data: { ...mockPlan, active: false } })
 
     const { result } = renderHook(() => useTogglePlan(COMPANY_ID), { wrapper: wrapper() })
 
     result.current.mutate('plan-1')
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    expect(api.plansApi.toggle).toHaveBeenCalledWith(COMPANY_ID, 'plan-1')
+    expect(http.patch).toHaveBeenCalledWith(`/companies/${COMPANY_ID}/plans/plan-1/toggle`)
   })
 })

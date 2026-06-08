@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, use } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { campaignsApi } from '@/services/api'
+import { useCampaigns, useCampaignStats, useToggleCampaign, useUpdateCampaign } from '@/hooks/useCampaigns'
 import { useCompanyStore } from '@/store/company'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -77,7 +76,6 @@ function RangeSelector({ value, onChange }: { value: number; onChange: (v: numbe
 export default function CampaignDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router        = useRouter()
-  const qc            = useQueryClient()
   const activeCompany = useCompanyStore(s => s.activeCompany)
   const companyId     = activeCompany?.id ?? ''
 
@@ -85,34 +83,13 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
   const [editingName, setEditingName] = useState(false)
   const [rangeDays, setRangeDays]     = useState(14)
 
-  const { data: campaigns = [] } = useQuery({
-    queryKey: ['campaigns', companyId],
-    queryFn: () => campaignsApi.list(companyId),
-    enabled: !!companyId,
-  })
+  const { data: campaigns = [] } = useCampaigns(companyId)
   const campaign = campaigns.find(c => c.id === id)
 
-  const { data: stats, isLoading: statsLoading, isError: statsError } = useQuery<CampaignStats>({
-    queryKey: ['campaign-stats', id],
-    queryFn: () => campaignsApi.stats(companyId, id),
-    enabled: !!companyId && !!id,
-    retry: 1,
-  })
+  const { data: stats, isLoading: statsLoading, isError: statsError } = useCampaignStats(companyId, id)
 
-  const toggle = useMutation({
-    mutationFn: () => campaignsApi.toggle(companyId, id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['campaigns', companyId] }),
-    onError: () => toast.error('Erro'),
-  })
-
-  const updateName = useMutation({
-    mutationFn: () => campaignsApi.update(companyId, id, editName.trim()),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['campaigns', companyId] })
-      setEditingName(false)
-      toast.success('Nome atualizado')
-    },
-  })
+  const toggle     = useToggleCampaign(companyId)
+  const updateName = useUpdateCampaign(companyId)
 
   if (!activeCompany) return null
 
@@ -167,12 +144,12 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
                 className="h-9 px-3 rounded-lg bg-[#1a2130] border border-emerald-500 text-white text-lg font-semibold outline-none"
                 autoFocus
                 onKeyDown={e => {
-                  if (e.key === 'Enter') updateName.mutate()
+                  if (e.key === 'Enter') updateName.mutate({ id, name: editName.trim() }, { onSuccess: () => setEditingName(false) })
                   if (e.key === 'Escape') setEditingName(false)
                 }}
               />
               <button
-                onClick={() => updateName.mutate()}
+                onClick={() => updateName.mutate({ id, name: editName.trim() }, { onSuccess: () => setEditingName(false) })}
                 disabled={updateName.isPending}
                 className="h-9 px-3 bg-emerald-600 text-white text-sm rounded-lg"
               >
@@ -210,7 +187,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
             Editar campanha
           </button>
           <button
-            onClick={() => toggle.mutate()}
+            onClick={() => toggle.mutate(id)}
             disabled={toggle.isPending}
             className={cn(
               'flex items-center gap-2 h-9 px-4 text-sm rounded-lg border transition-colors',
@@ -273,7 +250,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
                 contentStyle={{ backgroundColor: '#0C1117', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, fontSize: 12 }}
                 labelStyle={{ color: '#9ca3af' }}
                 itemStyle={{ color: '#10b981' }}
-                formatter={(v: number) => [v, 'Visualizações']}
+                formatter={(v) => [v ?? 0, 'Visualizações']}
               />
               <Area
                 type="monotone"

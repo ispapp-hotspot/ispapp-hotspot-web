@@ -1,15 +1,14 @@
 'use client'
 
-import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { portalsApi, campaignsApi } from '@/services/api'
+import { useState, useEffect } from 'react'
+import { usePortals, useCreatePortal, useUpdatePortal, useTogglePortal, useDeletePortal, usePortalLeads } from '@/hooks/usePortals'
+import { useCampaigns } from '@/hooks/useCampaigns'
 import { useCompanyStore } from '@/store/company'
 import { toast } from 'sonner'
 import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { createPortal } from 'react-dom'
-import { useEffect } from 'react'
 import {
   Plus, Globe, X, Pencil, Trash2, Loader2, AlertTriangle,
   User, FileText, CreditCard, Power, PowerOff, Users, Download,
@@ -67,8 +66,10 @@ const portalFormSchema = z.object({
 type PortalForm = z.infer<typeof portalFormSchema>
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+type PartialConfigText = { welcomeText?: string; subtitle?: string; buttonText?: string }
+
 function defaultConfig(type: string) {
-  const defaults: Record<string, Partial<ReturnType<typeof defaultConfig>>> = {
+  const defaults: Record<string, PartialConfigText> = {
     PAID_ACCESS: { welcomeText: 'Escolha seu Plano',    subtitle: 'Selecione o melhor plano para navegar', buttonText: 'Ver Planos' },
     LOGIN_CPF:   { welcomeText: 'Acesse o WiFi',         subtitle: 'Digite seu CPF para continuar',          buttonText: 'Acessar Internet' },
     ISP_LOGIN:   { welcomeText: 'Login via Provedor',    subtitle: 'Clientes têm acesso imediato à internet', buttonText: 'Verificar e Conectar' },
@@ -258,15 +259,10 @@ function Modal({ title, onClose, children, maxWidth = 'max-w-lg' }: {
 function PortalFormModal({ portal, companyId, onClose }: {
   portal?: CaptivePortal; companyId: string; onClose: () => void
 }) {
-  const qc   = useQueryClient()
   const isEdit = !!portal
 
-  const { data: campaigns = [] } = useQuery({
-    queryKey: ['campaigns', companyId],
-    queryFn: () => campaignsApi.list(companyId),
-    enabled: !!companyId,
-    select: (data: Campaign[]) => data.filter(c => c.active),
-  })
+  const { data: allCampaigns = [] } = useCampaigns(companyId)
+  const campaigns = allCampaigns.filter(c => c.active)
 
   const { register, handleSubmit, control, setValue, watch, formState: { errors } } = useForm<PortalForm>({
     resolver: zodResolver(portalFormSchema),
@@ -278,28 +274,26 @@ function PortalFormModal({ portal, companyId, onClose }: {
   const watchedType   = watch('type')
   const watchedConfig = useWatch({ control, name: 'config' })
 
-  const save = useMutation({
-    mutationFn: (data: PortalForm) => {
-      const payload = {
-        name: data.name, type: data.type,
-        campaignId: data.campaignId ? data.campaignId as any : null,
-        config: data.config as Record<string, unknown>,
-      }
-      return isEdit
-        ? portalsApi.update(companyId, portal!.id, payload)
-        : portalsApi.create(companyId, payload)
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['portals', companyId] })
-      toast.success(isEdit ? 'Portal atualizado' : 'Portal criado')
-      onClose()
-    },
-    onError: () => toast.error('Erro ao salvar portal'),
-  })
+  const createPortalMutation = useCreatePortal(companyId)
+  const updatePortalMutation = useUpdatePortal(companyId)
+  const saveIsPending = createPortalMutation.isPending || updatePortalMutation.isPending
+
+  function onSave(data: PortalForm) {
+    const payload = {
+      name: data.name, type: data.type,
+      campaignId: data.campaignId ? data.campaignId as any : null,
+      config: data.config as Record<string, unknown>,
+    }
+    if (isEdit) {
+      updatePortalMutation.mutate({ portalId: portal!.id, data: payload }, { onSuccess: onClose })
+    } else {
+      createPortalMutation.mutate(payload, { onSuccess: onClose })
+    }
+  }
 
   return (
     <Modal title={isEdit ? `Editar — ${portal!.name}` : 'Novo Portal'} onClose={onClose} maxWidth="max-w-5xl">
-      <form onSubmit={handleSubmit((d) => save.mutate(d))} className="flex h-full">
+      <form onSubmit={handleSubmit(onSave)} className="flex h-full">
 
         {/* ── Left: form ── */}
         <div className="flex-1 px-6 py-5 space-y-5 overflow-y-auto border-r border-white/5">
@@ -470,11 +464,11 @@ function PortalFormModal({ portal, companyId, onClose }: {
 
           <button
             type="submit"
-            disabled={save.isPending}
+            disabled={saveIsPending}
             className="w-full h-10 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg transition-all active:scale-[0.98] disabled:opacity-50"
           >
-            {save.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-            {save.isPending ? 'Salvando...' : isEdit ? 'Salvar alterações' : 'Criar portal'}
+            {saveIsPending && <Loader2 className="w-4 h-4 animate-spin" />}
+            {saveIsPending ? 'Salvando...' : isEdit ? 'Salvar alterações' : 'Criar portal'}
           </button>
         </div>
 
@@ -496,10 +490,7 @@ function PortalFormModal({ portal, companyId, onClose }: {
 function LeadsModal({ portal, companyId, onClose }: {
   portal: CaptivePortal; companyId: string; onClose: () => void
 }) {
-  const { data: leads = [], isLoading } = useQuery({
-    queryKey: ['leads', portal.id],
-    queryFn: () => portalsApi.leads(companyId, portal.id),
-  })
+  const { data: leads = [], isLoading } = usePortalLeads(companyId, portal.id)
 
   function exportCsv() {
     const headers = ['Nome', 'CPF', 'E-mail', 'Telefone', 'MAC', 'IP', 'Data']
@@ -643,16 +634,11 @@ function PortalCard({ portal, companyId, onEdit, onDelete }: {
   onEdit: () => void
   onDelete: () => void
 }) {
-  const qc     = useQueryClient()
   const meta   = PORTAL_TYPES.find(t => t.value === portal.type)
   const Icon   = meta?.icon ?? Globe
   const colors = TYPE_COLOR[portal.type] ?? TYPE_COLOR.FREE_ACCESS
 
-  const toggle = useMutation({
-    mutationFn: () => portalsApi.toggle(companyId, portal.id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['portals', companyId] }),
-    onError: () => toast.error('Erro ao alterar status'),
-  })
+  const toggle = useTogglePortal(companyId)
 
   return (
     <div className={cn('bg-[#141920] border rounded-xl p-4 flex flex-col gap-3 transition-all', portal.active ? 'border-white/5 hover:border-white/10' : 'border-white/[0.03] opacity-60')}>
@@ -675,7 +661,7 @@ function PortalCard({ portal, companyId, onEdit, onDelete }: {
             </span>
           )}
           <button
-            onClick={() => toggle.mutate()}
+            onClick={() => toggle.mutate(portal.id)}
             disabled={toggle.isPending}
             title={portal.active ? 'Desativar' : 'Ativar'}
             className={cn('p-1.5 rounded-lg transition-colors', portal.active ? 'text-emerald-400 hover:bg-red-500/10 hover:text-red-400' : 'text-neutral-600 hover:bg-emerald-500/10 hover:text-emerald-400')}
@@ -716,23 +702,13 @@ function PortalCard({ portal, companyId, onEdit, onDelete }: {
 export default function PortalsPage() {
   const activeCompany = useCompanyStore((s) => s.activeCompany)
   const companyId     = activeCompany?.id ?? ''
-  const qc            = useQueryClient()
 
   const [modal, setModal] = useState<
     'create' | { edit: CaptivePortal } | { delete: CaptivePortal } | null
   >(null)
 
-  const { data: portals = [], isLoading } = useQuery({
-    queryKey: ['portals', companyId],
-    queryFn: () => portalsApi.list(companyId),
-    enabled: !!companyId,
-  })
-
-  const remove = useMutation({
-    mutationFn: (id: string) => portalsApi.delete(companyId, id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['portals', companyId] }); toast.success('Portal removido'); setModal(null) },
-    onError: (e: any) => toast.error(e?.response?.data ?? 'Erro ao remover portal'),
-  })
+  const { data: portals = [], isLoading } = usePortals(companyId)
+  const remove = useDeletePortal(companyId)
 
   if (!activeCompany) return (
     <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -814,7 +790,7 @@ export default function PortalsPage() {
         <DeletePortalModal
           portal={modal.delete}
           isPending={remove.isPending}
-          onConfirm={() => remove.mutate(modal.delete.id)}
+          onConfirm={() => remove.mutate(modal.delete.id, { onSuccess: () => setModal(null) })}
           onClose={() => setModal(null)}
         />
       )}

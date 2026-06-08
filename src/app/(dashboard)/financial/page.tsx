@@ -2,9 +2,10 @@
 
 import React, { useState } from 'react'
 import { useTransactions, useTransactionStats, useApproveTransaction, useCancelTransaction } from '@/hooks/useTransactions'
-import { Loader2, CheckCircle2, XCircle, Clock, CreditCard, ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react'
+import { Loader2, CheckCircle2, XCircle, Clock, CreditCard, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { FinancialTransaction, TransactionStatus } from '@/types'
+import type { TransactionFilters } from '@/hooks/useTransactions'
 
 const PAGE_SIZE = 20
 
@@ -76,7 +77,7 @@ function StatCard({ label, value, icon: Icon, accent }: { label: string; value: 
 function ExpandedRow({ tx }: { tx: FinancialTransaction }) {
   return (
     <tr className="bg-[#0c1117]">
-      <td colSpan={8} className="px-5 py-4">
+      <td colSpan={9} className="px-5 py-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
           {tx.leadEmail && (
             <div><p className="text-neutral-500 uppercase tracking-wide mb-1">E-mail</p><p className="text-neutral-300">{tx.leadEmail}</p></div>
@@ -108,42 +109,58 @@ function ExpandedRow({ tx }: { tx: FinancialTransaction }) {
   )
 }
 
-const STATUS_OPTIONS: { value: string; label: string }[] = [
-  { value: '', label: 'Todos' },
-  { value: 'pending', label: 'Pendente' },
-  { value: 'approved', label: 'Aprovado' },
-  { value: 'manual_approved', label: 'Aprovado M' },
-  { value: 'cancelled', label: 'Cancelado' },
-  { value: 'rejected', label: 'Rejeitado' },
-]
+const selectCls = 'h-9 px-3 rounded-lg bg-[#141920] border border-white/10 focus:border-emerald-500 text-white text-sm outline-none transition-colors cursor-pointer'
+const inputCls  = 'h-9 px-3 rounded-lg bg-[#141920] border border-white/10 focus:border-emerald-500 text-white placeholder:text-neutral-600 text-sm outline-none transition-colors'
 
 export default function FinancialPage() {
-  const [page,        setPage]        = useState(0)
-  const [statusFilter,setStatusFilter]= useState('')
-  const [search,      setSearch]      = useState('')
-  const [expanded,    setExpanded]    = useState<string | null>(null)
+  const [page,          setPage]          = useState(0)
+  const [search,        setSearch]        = useState('')
+  const [expanded,      setExpanded]      = useState<string | null>(null)
+  const [status,        setStatus]        = useState('')
+  const [paymentMethod, setPaymentMethod] = useState('')
+  const [gatewayType,   setGatewayType]   = useState('')
+  const [dateFrom,      setDateFrom]      = useState('')
+  const [dateTo,        setDateTo]        = useState('')
 
-  const { data: stats, isLoading: statsLoading } = useTransactionStats()
-  const { data: txData, isLoading: txLoading } = useTransactions({ page, size: PAGE_SIZE })
+  const filters: Omit<TransactionFilters, 'page' | 'size'> = {
+    ...(status        && { status }),
+    ...(paymentMethod && { paymentMethod }),
+    ...(gatewayType   && { gatewayType }),
+    ...(dateFrom      && { dateFrom }),
+    ...(dateTo        && { dateTo }),
+  }
+
+  const listParams: TransactionFilters = { ...filters, page, size: PAGE_SIZE }
+
+  const { data: stats, isLoading: statsLoading } = useTransactionStats(filters)
+  const { data: txData, isLoading: txLoading }   = useTransactions(listParams)
 
   const approve = useApproveTransaction()
   const cancel  = useCancelTransaction()
 
   const allTransactions: FinancialTransaction[] = txData?.data ?? []
 
-  // Client-side filtering
-  const transactions = allTransactions.filter(tx => {
-    if (statusFilter && tx.status !== statusFilter) return false
-    if (search) {
-      const q = search.toLowerCase()
-      const leadInfo = [tx.leadName, tx.leadCpf, tx.macAddress, tx.leadEmail].filter(Boolean).join(' ').toLowerCase()
-      if (!leadInfo.includes(q)) return false
-    }
-    return true
-  })
+  // Client-side search only (status/method/gateway/date handled by backend)
+  const transactions = search
+    ? allTransactions.filter(tx => {
+        const q = search.toLowerCase()
+        return [tx.leadName, tx.leadCpf, tx.macAddress, tx.leadEmail].filter(Boolean).join(' ').toLowerCase().includes(q)
+      })
+    : allTransactions
 
-  const total = txData?.total ?? 0
+  const total      = txData?.total ?? 0
   const totalPages = Math.ceil(total / PAGE_SIZE)
+
+  const hasFilters = !!(status || paymentMethod || gatewayType || dateFrom || dateTo || search)
+
+  function clearFilters() {
+    setStatus(''); setPaymentMethod(''); setGatewayType('')
+    setDateFrom(''); setDateTo(''); setSearch(''); setPage(0)
+  }
+
+  function handleFilterChange(fn: () => void) {
+    fn(); setPage(0)
+  }
 
   return (
     <div className="space-y-6">
@@ -153,7 +170,7 @@ export default function FinancialPage() {
         <p className="text-sm text-neutral-400 mt-0.5">Transações de pagamento</p>
       </div>
 
-      {/* Stats */}
+      {/* Stats — reflect active filters */}
       {statsLoading ? (
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
           {[...Array(4)].map((_, i) => (
@@ -170,32 +187,79 @@ export default function FinancialPage() {
       ) : null}
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3">
-        <input
-          type="text"
-          placeholder="Buscar por MAC, CPF, nome ou e-mail…"
-          value={search}
-          onChange={e => { setSearch(e.target.value); setPage(0) }}
-          className="h-9 px-3 rounded-lg bg-[#141920] border border-white/10 focus:border-emerald-500 text-white placeholder:text-neutral-600 text-sm outline-none transition-colors min-w-[240px]"
-        />
-        <select
-          value={statusFilter}
-          onChange={e => { setStatusFilter(e.target.value); setPage(0) }}
-          className="h-9 px-3 rounded-lg bg-[#141920] border border-white/10 focus:border-emerald-500 text-white text-sm outline-none transition-colors cursor-pointer"
-        >
-          {STATUS_OPTIONS.map(o => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
+      <div className="bg-[#141920] border border-white/5 rounded-2xl p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-neutral-500 font-medium uppercase tracking-wider">Filtros</p>
+          {hasFilters && (
+            <button onClick={clearFilters} className="flex items-center gap-1 text-xs text-neutral-500 hover:text-white transition-colors">
+              <X className="w-3 h-3" /> Limpar
+            </button>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <input
+            type="text"
+            placeholder="Buscar por MAC, CPF, nome ou e-mail…"
+            value={search}
+            onChange={e => handleFilterChange(() => setSearch(e.target.value))}
+            className={cn(inputCls, 'min-w-[220px] flex-1')}
+          />
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={e => handleFilterChange(() => setDateFrom(e.target.value))}
+            className={cn(inputCls, 'text-neutral-300')}
+            title="Data inicial"
+          />
+          <input
+            type="date"
+            value={dateTo}
+            onChange={e => handleFilterChange(() => setDateTo(e.target.value))}
+            className={cn(inputCls, 'text-neutral-300')}
+            title="Data final"
+          />
+          <select
+            value={status}
+            onChange={e => handleFilterChange(() => setStatus(e.target.value))}
+            className={selectCls}
+          >
+            <option value="">Todos os status</option>
+            <option value="pending">Pendente</option>
+            <option value="approved">Aprovado</option>
+            <option value="manual_approved">Aprovado M</option>
+            <option value="cancelled">Cancelado</option>
+            <option value="rejected">Rejeitado</option>
+            <option value="refunded">Estornado</option>
+          </select>
+          <select
+            value={paymentMethod}
+            onChange={e => handleFilterChange(() => setPaymentMethod(e.target.value))}
+            className={selectCls}
+          >
+            <option value="">Todos os métodos</option>
+            <option value="pix">Pix</option>
+            <option value="credit_card">Cartão</option>
+            <option value="boleto">Boleto</option>
+          </select>
+          <select
+            value={gatewayType}
+            onChange={e => handleFilterChange(() => setGatewayType(e.target.value))}
+            className={selectCls}
+          >
+            <option value="">Todos os gateways</option>
+            <option value="MERCADO_PAGO">Mercado Pago</option>
+            <option value="EFI">EFI</option>
+          </select>
+        </div>
       </div>
 
       {/* Table */}
       <div className="bg-[#141920] border border-white/5 rounded-2xl overflow-hidden">
         <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
           <p className="text-sm font-semibold text-white">Transações</p>
-          {search || statusFilter ? (
-            <p className="text-xs text-neutral-500">{transactions.length} resultado(s)</p>
-          ) : null}
+          {hasFilters && (
+            <p className="text-xs text-neutral-500">{total} resultado(s)</p>
+          )}
         </div>
 
         {txLoading ? (
@@ -227,7 +291,6 @@ export default function FinancialPage() {
                 {transactions.map(tx => (
                   <React.Fragment key={tx.id}>
                     <tr className="hover:bg-white/[0.02] transition-colors">
-                      {/* Expand toggle */}
                       <td className="px-3 py-3.5">
                         <button
                           onClick={() => setExpanded(expanded === tx.id ? null : tx.id)}
