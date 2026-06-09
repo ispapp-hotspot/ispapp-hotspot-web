@@ -9,19 +9,26 @@ function fetchDevices(companyId: string) {
 function fetchDevice(companyId: string, deviceId: string) {
   return http.get<Device>(`/companies/${companyId}/devices/${deviceId}`).then((r) => r.data)
 }
-function provisionDevice(companyId: string, name: string, type = 'mikrotik') {
-  return http.post<DeviceProvisionResult>(`/companies/${companyId}/devices`, { name, type }).then((r) => r.data)
+function provisionDevice(companyId: string, name: string, type = 'mikrotik', connectionType = 'wireguard') {
+  return http.post<DeviceProvisionResult>(`/companies/${companyId}/devices`, { name, type, connectionType }).then((r) => r.data)
 }
 function updateDevice(companyId: string, deviceId: string, data: {
   name: string; routerosIp?: string; routerosPort?: number; routerosUser?: string; portalId?: string
 }) {
   return http.put<Device>(`/companies/${companyId}/devices/${deviceId}`, data).then((r) => r.data)
 }
+export interface AutoSetupResult {
+  success: boolean
+  message: string
+  hotspotId?: string
+  script?: string
+}
+
 function autoSetupDevice(companyId: string, deviceId: string, payload: {
-  routerosIp: string; routerosUser: string; routerosPassword: string
-  routerosPort: number; hotspotInterface: string; portalId: string
+  routerosIp?: string; routerosUser?: string; routerosPassword?: string
+  routerosPort?: number; hotspotInterface: string; portalId: string
 }) {
-  return http.post(`/companies/${companyId}/devices/${deviceId}/auto-setup`, payload).then((r) => r.data)
+  return http.post<AutoSetupResult>(`/companies/${companyId}/devices/${deviceId}/auto-setup`, payload).then((r) => r.data)
 }
 function deleteDevice(companyId: string, deviceId: string) {
   return http.delete(`/companies/${companyId}/devices/${deviceId}`)
@@ -51,11 +58,10 @@ export function useDevice(companyId: string, deviceId: string) {
 export function useProvisionDevice(companyId: string) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ name, type }: { name: string; type?: string }) =>
-      provisionDevice(companyId, name, type),
+    mutationFn: ({ name, type, connectionType }: { name: string; type?: string; connectionType?: string }) =>
+      provisionDevice(companyId, name, type, connectionType),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: deviceKeys.all(companyId) })
-      toast.success('Dispositivo provisionado!')
     },
     onError: () => toast.error('Erro ao provisionar dispositivo.'),
   })
@@ -95,14 +101,14 @@ export function useAutoSetupDevice(companyId: string) {
     mutationFn: ({ deviceId, data }: {
       deviceId: string
       data: {
-        routerosIp: string; routerosUser: string; routerosPassword: string
-        routerosPort: number; hotspotInterface: string; portalId: string
+        routerosIp?: string; routerosUser?: string; routerosPassword?: string
+        routerosPort?: number; hotspotInterface: string; portalId: string
       }
     }) => autoSetupDevice(companyId, deviceId, data),
-    onSuccess: (_, { deviceId }) => {
+    onSuccess: (result, { deviceId }) => {
       qc.invalidateQueries({ queryKey: deviceKeys.all(companyId) })
       qc.invalidateQueries({ queryKey: deviceKeys.one(companyId, deviceId) })
-      toast.success('Auto Setup concluído!')
+      if (!result?.script) toast.success('Auto Setup concluído!')
     },
     onError: () => toast.error('Erro no Auto Setup. Verifique as credenciais.'),
   })

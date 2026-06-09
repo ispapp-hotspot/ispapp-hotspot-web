@@ -1,33 +1,43 @@
 import { useQuery } from '@tanstack/react-query'
 import http from '@/lib/http'
-import type { HotspotSession } from '@/types'
+import type { SessionListResponse } from '@/types'
 
-function fetchActiveSessions(companyId: string) {
-  return http.get<HotspotSession[]>(`/companies/${companyId}/sessions?status=active`).then((r) => r.data)
+function fetchActiveSessions(companyId: string, page = 0, size = 20) {
+  return http
+    .get<SessionListResponse>(`/companies/${companyId}/sessions`, {
+      params: { status: 'active', page, size },
+    })
+    .then((r) => r.data)
 }
-function fetchSessions(companyId: string, params?: Record<string, string>) {
-  return http.get<HotspotSession[]>(`/companies/${companyId}/sessions`, { params }).then((r) => r.data)
+
+function fetchSessionHistory(companyId: string, page = 0, size = 20) {
+  return http
+    .get<SessionListResponse>(`/companies/${companyId}/sessions`, {
+      params: { page, size },
+    })
+    .then((r) => r.data)
 }
 
 export const sessionKeys = {
-  active: (companyId: string) => ['sessions', companyId, 'active'] as const,
-  list: (companyId: string, params?: Record<string, string>) =>
-    ['sessions', companyId, params] as const,
+  active: (companyId: string, page: number, size: number) =>
+    ['sessions', companyId, 'active', page, size] as const,
+  history: (companyId: string, page: number, size: number) =>
+    ['sessions', companyId, 'history', page, size] as const,
 }
 
-export function useActiveSessions(companyId: string) {
+export function useActiveSessions(companyId: string, page = 0, size = 20) {
   return useQuery({
-    queryKey: sessionKeys.active(companyId),
-    queryFn: () => fetchActiveSessions(companyId),
+    queryKey: sessionKeys.active(companyId, page, size),
+    queryFn: () => fetchActiveSessions(companyId, page, size),
     enabled: !!companyId,
     refetchInterval: 30_000,
   })
 }
 
-export function useSessions(companyId: string, params?: Record<string, string>) {
+export function useSessions(companyId: string, page = 0, size = 20) {
   return useQuery({
-    queryKey: sessionKeys.list(companyId, params),
-    queryFn: () => fetchSessions(companyId, params),
+    queryKey: sessionKeys.history(companyId, page, size),
+    queryFn: () => fetchSessionHistory(companyId, page, size),
     enabled: !!companyId,
   })
 }

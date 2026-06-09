@@ -27,16 +27,16 @@ const DEVICE_ID  = 'device-456'
 
 const mockDevice: Device = {
   id: DEVICE_ID, companyId: COMPANY_ID, name: 'CCR2116',
-  type: 'mikrotik', status: 'ONLINE', wgIp: '10.0.0.2',
+  type: 'mikrotik', tunnelType: 'wireguard', status: 'ONLINE', wgIp: '10.0.0.2',
   wgSetupDone: true, autoSetupDone: true,
   createdAt: '2024-01-01T00:00:00Z',
 } as Device
 
 const mockProvision: DeviceProvisionResult = {
-  device: mockDevice, wgPrivateKey: 'wg-priv-key',
-  nasSecret: 'nas-secret', wgServerHost: 'vpn.example.com',
-  wgServerPort: 51820, vpnIp: '10.0.0.2',
-} as DeviceProvisionResult
+  device: mockDevice, connectionType: 'wireguard',
+  wgPrivateKey: 'wg-priv-key', nasSecret: 'nas-secret',
+  wgServerHost: 'vpn.example.com', wgServerPort: 51820, vpnIp: '10.0.0.2',
+}
 
 function wrapper() {
   const qc = createTestQueryClient()
@@ -66,20 +66,42 @@ describe('useDevices', () => {
 describe('useProvisionDevice', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('provisions device and shows toast', async () => {
-    const { toast } = await import('sonner')
+  it('provisions wireguard device', async () => {
     vi.mocked(http.post).mockResolvedValue({ data: mockProvision })
 
     const { result } = renderHook(() => useProvisionDevice(COMPANY_ID), { wrapper: wrapper() })
 
-    result.current.mutate({ name: 'CCR2116', type: 'mikrotik' })
+    result.current.mutate({ name: 'CCR2116', type: 'mikrotik', connectionType: 'wireguard' })
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(http.post).toHaveBeenCalledWith(
       `/companies/${COMPANY_ID}/devices`,
-      { name: 'CCR2116', type: 'mikrotik' },
+      { name: 'CCR2116', type: 'mikrotik', connectionType: 'wireguard' },
     )
-    expect(toast.success).toHaveBeenCalledWith('Dispositivo provisionado!')
+    expect(result.current.data?.connectionType).toBe('wireguard')
+  })
+
+  it('provisions l2tp device', async () => {
+    const l2tpProvision: DeviceProvisionResult = {
+      device: { ...mockDevice, tunnelType: 'l2tp' },
+      connectionType: 'l2tp',
+      l2tpServer: 'vpn.example.com', l2tpUser: 'ispapp-router-abc123',
+      l2tpPassword: 'secret', l2tpIpsecSecret: 'psk',
+      vpnIp: '10.9.0.2', nasSecret: 'nas-secret',
+    }
+    vi.mocked(http.post).mockResolvedValue({ data: l2tpProvision })
+
+    const { result } = renderHook(() => useProvisionDevice(COMPANY_ID), { wrapper: wrapper() })
+
+    result.current.mutate({ name: 'RB750', type: 'mikrotik', connectionType: 'l2tp' })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(http.post).toHaveBeenCalledWith(
+      `/companies/${COMPANY_ID}/devices`,
+      { name: 'RB750', type: 'mikrotik', connectionType: 'l2tp' },
+    )
+    expect(result.current.data?.connectionType).toBe('l2tp')
+    expect(result.current.data?.l2tpUser).toBe('ispapp-router-abc123')
   })
 
   it('shows error toast on failure', async () => {
@@ -166,9 +188,11 @@ describe('useAutoSetupDevice', () => {
     hotspotInterface: 'ether1', portalId: 'portal-1',
   }
 
+  const l2tpSetupData = { hotspotInterface: 'ether1', portalId: 'portal-1' }
+
   it('runs auto setup and shows toast', async () => {
     const { toast } = await import('sonner')
-    vi.mocked(http.post).mockResolvedValue({ data: mockDevice })
+    vi.mocked(http.post).mockResolvedValue({ data: { success: true, message: 'OK' } })
 
     const { result } = renderHook(() => useAutoSetupDevice(COMPANY_ID), { wrapper: wrapper() })
 
@@ -180,6 +204,24 @@ describe('useAutoSetupDevice', () => {
       setupData,
     )
     expect(toast.success).toHaveBeenCalledWith('Auto Setup concluído!')
+  })
+
+  it('runs l2tp auto setup without routeros fields', async () => {
+    const { toast } = await import('sonner')
+    vi.mocked(http.post).mockResolvedValue({ data: { success: true, message: 'Script gerado', script: '# script' } })
+
+    const { result } = renderHook(() => useAutoSetupDevice(COMPANY_ID), { wrapper: wrapper() })
+
+    result.current.mutate({ deviceId: DEVICE_ID, data: l2tpSetupData })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(http.post).toHaveBeenCalledWith(
+      `/companies/${COMPANY_ID}/devices/${DEVICE_ID}/auto-setup`,
+      l2tpSetupData,
+    )
+    // script returned → no toast (component handles modal state)
+    expect(toast.success).not.toHaveBeenCalled()
+    expect(result.current.data?.script).toBe('# script')
   })
 
   it('shows error toast on failure', async () => {

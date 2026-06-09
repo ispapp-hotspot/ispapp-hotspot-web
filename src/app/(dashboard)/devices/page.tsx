@@ -12,32 +12,33 @@ import { z } from 'zod'
 import {
   Plus, Wifi, X, Copy, Check, Pencil, Trash2,
   Loader2, AlertTriangle, CheckCircle2, Clock, XCircle, RefreshCw,
+  Cpu, HardDrive, MemoryStick, Activity, Server, Info,
 } from 'lucide-react'
 import type { Device, DeviceProvisionResult } from '@/types'
 import { cn } from '@/lib/utils'
+import { formatUptime, usagePct } from '@/utils/device-utils'
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 const DEVICE_TYPES = [
-  { value: 'mikrotik',  label: 'MikroTik',  supported: true,  hint: 'RouterOS REST API v7' },
+  { value: 'mikrotik',  label: 'MikroTik',  supported: true,  hint: 'RouterOS' },
   { value: 'ubiquiti',  label: 'Ubiquiti',  supported: false, hint: 'Em breve' },
 ] as const
 type DeviceType = typeof DEVICE_TYPES[number]['value']
 
-const nameSchema = z.object({
-  name: z.string().min(2, 'Nome obrigatório'),
-  type: z.string().default('mikrotik'),
-})
-type NameForm = z.infer<typeof nameSchema>
+const TUNNEL_TYPES = [
+  { value: 'wireguard', label: 'WireGuard', hint: 'RouterOS v7+', badge: 'WG' },
+  { value: 'l2tp',      label: 'L2TP/IPsec', hint: 'RouterOS v6 (legado)', badge: 'L2' },
+] as const
+type TunnelTypeOption = typeof TUNNEL_TYPES[number]['value']
 
 const addDeviceSchema = z.object({
   name:              z.string().min(2, 'Nome obrigatório'),
   type:              z.string().default('mikrotik'),
-  // Conexão RouterOS (IP local do MikroTik, antes do VPN)
+  connectionType:    z.enum(['wireguard', 'l2tp']).default('wireguard'),
   routerosIp:        z.string().min(1, 'IP obrigatório'),
   routerosUser:      z.string().min(1, 'Obrigatório'),
   routerosPassword:  z.string().min(1, 'Obrigatório'),
   routerosPort:      z.coerce.number().int().min(1).max(65535).default(8728),
-  // Portal exibido ao cliente
   portalId:          z.string().min(1, 'Selecione um portal'),
 })
 type AddDeviceForm = z.infer<typeof addDeviceSchema>
@@ -45,10 +46,10 @@ type ConnectionDefaults = Pick<AddDeviceForm,
   'routerosIp' | 'routerosUser' | 'routerosPassword' | 'routerosPort' | 'portalId'>
 
 const autoSetupSchema = z.object({
-  // Conexão
-  routerosIp:        z.string().min(1, 'Obrigatório'),
-  routerosUser:      z.string().min(1, 'Obrigatório'),
-  routerosPassword:  z.string().min(1, 'Obrigatório'),
+  // Conexão — optional for L2TP (RouterOS v6 has no REST API)
+  routerosIp:        z.string().optional(),
+  routerosUser:      z.string().optional(),
+  routerosPassword:  z.string().optional(),
   routerosPort:      z.coerce.number().int().min(1).max(65535).default(8728),
   // Hotspot
   hotspotInterface:  z.string().min(1, 'Obrigatório'),
@@ -118,18 +119,20 @@ function AddDeviceModal({ companyId, onClose, onAutoSetup }: {
   onAutoSetup: (device: Device, conn: ConnectionDefaults) => void
 }) {
   const [result, setResult] = useState<{ provision: DeviceProvisionResult; conn: ConnectionDefaults } | null>(null)
-  const [selectedType, setSelectedType] = useState<DeviceType>('mikrotik')
+  const [selectedType,   setSelectedType]   = useState<DeviceType>('mikrotik')
+  const [selectedTunnel, setSelectedTunnel] = useState<TunnelTypeOption>('wireguard')
 
   const { data: portals = [] } = usePortals(companyId)
 
   const { register, handleSubmit, setValue, formState: { errors } } = useForm<AddDeviceForm>({
     resolver: zodResolver(addDeviceSchema),
-    defaultValues: { type: 'mikrotik', routerosPort: 8728 },
+    defaultValues: { type: 'mikrotik', connectionType: 'wireguard', routerosPort: 8728 },
   })
 
   const provision = useProvisionDevice(companyId)
 
   if (result) {
+    const isL2tp = result.provision.connectionType === 'l2tp'
     return (
       <Modal title="Dispositivo provisionado" onClose={onClose}>
         <div className="space-y-4">
@@ -139,10 +142,30 @@ function AddDeviceModal({ companyId, onClose, onAutoSetup }: {
               Guarde estas informações agora — <strong>não serão exibidas novamente</strong>.
             </p>
           </div>
-          <CopyField label="WireGuard Private Key" value={result.provision.wgPrivateKey} />
-          <CopyField label="NAS Secret (RADIUS)"   value={result.provision.nasSecret} />
-          <CopyField label="Servidor WireGuard"     value={`${result.provision.wgServerHost}:${result.provision.wgServerPort}`} />
-          <CopyField label="IP VPN Alocado"         value={result.provision.vpnIp} />
+
+          {isL2tp ? (
+            <>
+              {!result.provision.l2tpServer && (
+                <div className="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-300">
+                  Servidor L2TP não configurado. Defina a variável <code className="font-mono">L2TP_SERVER</code> no servidor.
+                </div>
+              )}
+              <CopyField label="Servidor L2TP"       value={result.provision.l2tpServer ?? ''} />
+              <CopyField label="Usuário L2TP"         value={result.provision.l2tpUser ?? ''} />
+              <CopyField label="Senha L2TP"           value={result.provision.l2tpPassword ?? ''} />
+              <CopyField label="IPsec PSK"            value={result.provision.l2tpIpsecSecret ?? ''} />
+              <CopyField label="IP VPN Alocado"       value={result.provision.vpnIp} />
+              <CopyField label="NAS Secret (RADIUS)"  value={result.provision.nasSecret} />
+            </>
+          ) : (
+            <>
+              <CopyField label="WireGuard Private Key" value={result.provision.wgPrivateKey ?? ''} />
+              <CopyField label="NAS Secret (RADIUS)"   value={result.provision.nasSecret} />
+              <CopyField label="Servidor WireGuard"    value={`${result.provision.wgServerHost}:${result.provision.wgServerPort}`} />
+              <CopyField label="IP VPN Alocado"        value={result.provision.vpnIp} />
+            </>
+          )}
+
           <div className="flex gap-3 pt-2">
             <button
               onClick={onClose}
@@ -155,7 +178,7 @@ function AddDeviceModal({ companyId, onClose, onAutoSetup }: {
               className="flex-1 h-10 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2"
             >
               <RefreshCw className="w-4 h-4" />
-              Auto Setup agora
+              {isL2tp ? 'Gerar Script' : 'Auto Setup agora'}
             </button>
           </div>
         </div>
@@ -166,7 +189,7 @@ function AddDeviceModal({ companyId, onClose, onAutoSetup }: {
   return (
     <Modal title="Novo Dispositivo" onClose={onClose} maxWidth="max-w-md">
       <form onSubmit={handleSubmit((d) => provision.mutate(
-        { name: d.name, type: d.type },
+        { name: d.name, type: d.type, connectionType: d.connectionType },
         { onSuccess: (r) => setResult({ provision: r, conn: { routerosIp: d.routerosIp, routerosUser: d.routerosUser, routerosPassword: d.routerosPassword, routerosPort: d.routerosPort, portalId: d.portalId } }) }
       ))} className="space-y-5">
 
@@ -176,13 +199,13 @@ function AddDeviceModal({ companyId, onClose, onAutoSetup }: {
           <input
             {...register('name')}
             className={inputCls}
-            placeholder={selectedType === 'mikrotik' ? 'Ex: CCR2116 Recepção' : 'Ex: EdgeRouter Sala'}
+            placeholder="Ex: CCR2116 Recepção"
             autoFocus
           />
           {errors.name && <p className="text-xs text-red-400 mt-1">{errors.name.message}</p>}
         </div>
 
-        {/* Tipo */}
+        {/* Tipo de roteador */}
         <div>
           <label className={labelCls}>Tipo de roteador</label>
           <div className="grid grid-cols-2 gap-2">
@@ -201,6 +224,31 @@ function AddDeviceModal({ companyId, onClose, onAutoSetup }: {
                 )}
               >
                 <p className={cn('text-sm font-medium', selectedType === value && supported ? 'text-emerald-400' : 'text-white')}>
+                  {label}
+                </p>
+                <p className="text-xs text-neutral-500 mt-0.5">{hint}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Tipo de conexão VPN */}
+        <div>
+          <label className={labelCls}>Tipo de conexão VPN</label>
+          <div className="grid grid-cols-2 gap-2">
+            {TUNNEL_TYPES.map(({ value, label, hint }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => { setSelectedTunnel(value); setValue('connectionType', value) }}
+                className={cn(
+                  'relative px-3 py-3 rounded-lg border text-left transition-all',
+                  selectedTunnel === value
+                    ? 'border-emerald-500/50 bg-emerald-500/10'
+                    : 'border-white/10 bg-[#1a2130] hover:border-white/20'
+                )}
+              >
+                <p className={cn('text-sm font-medium', selectedTunnel === value ? 'text-emerald-400' : 'text-white')}>
                   {label}
                 </p>
                 <p className="text-xs text-neutral-500 mt-0.5">{hint}</p>
@@ -269,7 +317,9 @@ function AutoSetupModal({ device, companyId, onClose, connDefaults }: {
   device: Device; companyId: string; onClose: () => void
   connDefaults?: ConnectionDefaults
 }) {
+  const [script, setScript] = useState<string | null>(null)
   const { data: portals = [] } = usePortals(companyId)
+  const isL2tp = device.tunnelType === 'l2tp'
 
   const { register, handleSubmit, formState: { errors } } = useForm<AutoSetupForm>({
     resolver: zodResolver(autoSetupSchema),
@@ -285,50 +335,95 @@ function AutoSetupModal({ device, companyId, onClose, connDefaults }: {
 
   const setup = useAutoSetupDevice(companyId)
 
-  const typeLabel = (device as any).type === 'mikrotik' ? 'MikroTik RouterOS REST API v7' : 'API do dispositivo'
+  if (script) {
+    return (
+      <Modal title={`Script L2TP — ${device.name}`} onClose={onClose} maxWidth="max-w-2xl">
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-sky-500/10 border border-sky-500/20">
+            <RefreshCw className="w-4 h-4 text-sky-400 shrink-0" />
+            <p className="text-xs text-sky-300">
+              Copie e cole este script no <strong>Terminal do MikroTik</strong> (New Terminal no Winbox).
+            </p>
+          </div>
+          <div className="relative">
+            <pre className="bg-[#0C1117] border border-white/10 rounded-lg p-4 text-xs text-emerald-300 font-mono overflow-auto max-h-96 whitespace-pre-wrap break-all">
+              {script}
+            </pre>
+            <button
+              onClick={() => navigator.clipboard.writeText(script)}
+              className="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs text-neutral-300 transition-colors"
+            >
+              <Copy className="w-3 h-3" /> Copiar tudo
+            </button>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-full h-10 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg transition-all"
+          >
+            Concluído
+          </button>
+        </div>
+      </Modal>
+    )
+  }
 
   return (
-    <Modal title={`Auto Setup — ${device.name}`} onClose={onClose} maxWidth="max-w-md">
-      <form onSubmit={handleSubmit((d) => setup.mutate({ deviceId: device.id, data: d }, { onSuccess: onClose }))} className="space-y-5">
+    <Modal title={`${isL2tp ? 'Gerar Script' : 'Auto Setup'} — ${device.name}`} onClose={onClose} maxWidth="max-w-md">
+      <form onSubmit={handleSubmit((d) => setup.mutate(
+        { deviceId: device.id, data: d },
+        { onSuccess: (result) => { if (result?.script) setScript(result.script); else onClose() } }
+      ))} className="space-y-5">
 
         {/* Info do device */}
         <div className="bg-[#0C1117] border border-white/10 rounded-lg px-4 py-3 space-y-1">
           <p className="text-xs text-neutral-500 uppercase tracking-wider">Dispositivo</p>
           <p className="text-sm text-white font-medium">{device.name}</p>
           <p className="text-xs text-neutral-400">
-            IP VPN: <code className="font-mono text-emerald-400">{device.wgIp}</code> · {typeLabel}
+            IP VPN: <code className="font-mono text-emerald-400">{device.wgIp}</code>
+            {' · '}
+            <span className={cn('font-medium', isL2tp ? 'text-sky-400' : 'text-violet-400')}>
+              {isL2tp ? 'L2TP/IPsec v6' : 'WireGuard v7'}
+            </span>
           </p>
         </div>
 
-        {/* Conexão */}
-        <div>
-          <p className={labelCls}>Conexão RouterOS API</p>
-          <div className="space-y-3">
-            <div className="grid grid-cols-3 gap-3">
-              <div className="col-span-2">
-                <label className="text-xs text-neutral-500 mb-1 block">IP do MikroTik</label>
-                <input {...register('routerosIp')} className={inputCls} placeholder="192.168.1.1" autoFocus />
-                {errors.routerosIp && <p className="text-xs text-red-400 mt-1">{errors.routerosIp.message}</p>}
+        {/* Conexão — só WireGuard precisa (L2TP não tem REST API v6) */}
+        {!isL2tp && (
+          <div>
+            <p className={labelCls}>Conexão RouterOS API</p>
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2">
+                  <label className="text-xs text-neutral-500 mb-1 block">IP do MikroTik</label>
+                  <input {...register('routerosIp')} className={inputCls} placeholder="192.168.1.1" autoFocus />
+                  {errors.routerosIp && <p className="text-xs text-red-400 mt-1">{errors.routerosIp.message}</p>}
+                </div>
+                <div>
+                  <label className="text-xs text-neutral-500 mb-1 block">Porta</label>
+                  <input {...register('routerosPort')} type="number" className={inputCls} placeholder="8728" />
+                </div>
               </div>
-              <div>
-                <label className="text-xs text-neutral-500 mb-1 block">Porta</label>
-                <input {...register('routerosPort')} type="number" className={inputCls} placeholder="8728" />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-neutral-500 mb-1 block">Usuário</label>
-                <input {...register('routerosUser')} className={inputCls} placeholder="admin" />
-                {errors.routerosUser && <p className="text-xs text-red-400 mt-1">{errors.routerosUser.message}</p>}
-              </div>
-              <div>
-                <label className="text-xs text-neutral-500 mb-1 block">Senha</label>
-                <input {...register('routerosPassword')} type="password" className={inputCls} placeholder="••••••••" />
-                {errors.routerosPassword && <p className="text-xs text-red-400 mt-1">{errors.routerosPassword.message}</p>}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-neutral-500 mb-1 block">Usuário</label>
+                  <input {...register('routerosUser')} className={inputCls} placeholder="admin" />
+                  {errors.routerosUser && <p className="text-xs text-red-400 mt-1">{errors.routerosUser.message}</p>}
+                </div>
+                <div>
+                  <label className="text-xs text-neutral-500 mb-1 block">Senha</label>
+                  <input {...register('routerosPassword')} type="password" className={inputCls} placeholder="••••••••" />
+                  {errors.routerosPassword && <p className="text-xs text-red-400 mt-1">{errors.routerosPassword.message}</p>}
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
+
+        {isL2tp && (
+          <div className="px-3 py-2.5 rounded-lg bg-neutral-800/50 border border-white/5 text-xs text-neutral-400">
+            RouterOS v6 não possui REST API. O sistema gerará um script para colar no terminal.
+          </div>
+        )}
 
         {/* Hotspot */}
         <div>
@@ -336,7 +431,7 @@ function AutoSetupModal({ device, companyId, onClose, connDefaults }: {
           <div className="space-y-3">
             <div>
               <label className="text-xs text-neutral-500 mb-1 block">Interface</label>
-              <input {...register('hotspotInterface')} className={inputCls} placeholder="ether1" />
+              <input {...register('hotspotInterface')} className={inputCls} placeholder="ether1" autoFocus={isL2tp} />
               {errors.hotspotInterface && <p className="text-xs text-red-400 mt-1">{errors.hotspotInterface.message}</p>}
             </div>
             <div>
@@ -358,7 +453,9 @@ function AutoSetupModal({ device, companyId, onClose, connDefaults }: {
           className="w-full h-10 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg transition-all active:scale-[0.98] disabled:opacity-50"
         >
           {setup.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-          {setup.isPending ? 'Configurando...' : 'Executar Auto Setup'}
+          {setup.isPending
+            ? (isL2tp ? 'Gerando...' : 'Configurando...')
+            : (isL2tp ? 'Gerar Script' : 'Executar Auto Setup')}
         </button>
       </form>
     </Modal>
@@ -496,12 +593,195 @@ function EditDeviceModal({ device, companyId, onClose }: {
   )
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function UsageBar({ value, max, color = 'bg-emerald-500' }: { value: number; max: number; color?: string }) {
+  const pct = usagePct(value, max)
+  const barColor = pct > 85 ? 'bg-red-500' : pct > 60 ? 'bg-yellow-500' : color
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
+        <div className={cn('h-full rounded-full transition-all', barColor)} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="text-xs text-neutral-400 w-8 text-right">{pct}%</span>
+    </div>
+  )
+}
+
+// ── Device Details Modal ───────────────────────────────────────────────────────
+function DeviceDetailsModal({ device, onClose }: { device: Device; onClose: () => void }) {
+  const { label: statusLabel, color: statusColor, icon: StatusIcon } = STATUS_CONFIG[device.status] ?? STATUS_CONFIG.PENDING
+  const isL2tp     = device.tunnelType === 'l2tp'
+  const hasMetrics = !!device.lastMetricsAt
+
+  return (
+    <Modal title={device.name} onClose={onClose} maxWidth="max-w-lg">
+      <div className="space-y-5">
+
+        {/* Status + board */}
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs text-neutral-500 uppercase tracking-wider mb-1">Dispositivo</p>
+            <p className="text-sm font-medium text-white">
+              {device.boardName ?? device.type}
+            </p>
+            {device.rosVersionString && (
+              <p className="text-xs text-neutral-500 mt-0.5">RouterOS {device.rosVersionString}</p>
+            )}
+          </div>
+          <span className={cn('flex items-center gap-1.5 text-sm font-medium', statusColor)}>
+            <StatusIcon className="w-4 h-4" />
+            {statusLabel}
+          </span>
+        </div>
+
+        {/* VPN */}
+        <div className="bg-[#0C1117] border border-white/5 rounded-lg px-4 py-3 space-y-2">
+          <p className="text-xs text-neutral-500 uppercase tracking-wider">Túnel VPN</p>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <p className="text-xs text-neutral-600 mb-0.5">Tipo</p>
+              <span className={cn(
+                'inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold',
+                isL2tp ? 'bg-sky-500/10 text-sky-400' : 'bg-violet-500/10 text-violet-400'
+              )}>
+                {isL2tp ? 'L2TP/IPsec v6' : 'WireGuard v7'}
+              </span>
+            </div>
+            <div>
+              <p className="text-xs text-neutral-600 mb-0.5">IP VPN</p>
+              <code className="font-mono text-emerald-400 text-xs">{device.wgIp ?? '—'}</code>
+            </div>
+            {device.lastHandshake && (
+              <div className="col-span-2">
+                <p className="text-xs text-neutral-600 mb-0.5">Último handshake</p>
+                <p className="text-xs text-neutral-300">
+                  {new Date(device.lastHandshake).toLocaleString('pt-BR')}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Métricas — só WireGuard com dados coletados */}
+        {!isL2tp && (
+          <div className="bg-[#0C1117] border border-white/5 rounded-lg px-4 py-3 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-neutral-500 uppercase tracking-wider">Sistema</p>
+              {device.lastMetricsAt ? (
+                <p className="text-xs text-neutral-600">
+                  atualizado {new Date(device.lastMetricsAt).toLocaleTimeString('pt-BR')}
+                </p>
+              ) : (
+                <p className="text-xs text-neutral-600">aguardando coleta...</p>
+              )}
+            </div>
+
+            {hasMetrics ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex items-center gap-2">
+                    <Activity className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-neutral-600">Uptime</p>
+                      <p className="text-xs text-white font-mono">{formatUptime(device.uptimeSeconds)}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Server className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-neutral-600">Placa</p>
+                      <p className="text-xs text-white truncate">{device.boardName ?? '—'}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="flex items-center gap-1.5 text-xs text-neutral-500">
+                        <Cpu className="w-3 h-3" /> CPU
+                      </span>
+                      <span className="text-xs text-neutral-400">{device.cpuLoad ?? 0}%</span>
+                    </div>
+                    <UsageBar value={device.cpuLoad ?? 0} max={100} />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="flex items-center gap-1.5 text-xs text-neutral-500">
+                        <MemoryStick className="w-3 h-3" /> RAM
+                      </span>
+                      <span className="text-xs text-neutral-400">
+                        {device.freeMemoryMb ?? 0} / {device.totalMemoryMb ?? 0} MB livres
+                      </span>
+                    </div>
+                    <UsageBar
+                      value={(device.totalMemoryMb ?? 0) - (device.freeMemoryMb ?? 0)}
+                      max={device.totalMemoryMb ?? 1}
+                      color="bg-blue-500"
+                    />
+                  </div>
+
+                  {(device.freeHddMb ?? 0) > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="flex items-center gap-1.5 text-xs text-neutral-500">
+                          <HardDrive className="w-3 h-3" /> Disco
+                        </span>
+                        <span className="text-xs text-neutral-400">{device.freeHddMb} MB livres</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-neutral-600 py-2 text-center">
+                Métricas disponíveis após o dispositivo ficar online e conectado via WireGuard
+              </p>
+            )}
+          </div>
+        )}
+
+        {isL2tp && (
+          <div className="px-3 py-2.5 rounded-lg bg-neutral-800/40 border border-white/5 text-xs text-neutral-500 text-center">
+            RouterOS v6 não expõe API de métricas. Monitoramento via ping apenas.
+          </div>
+        )}
+
+        {/* Configuração */}
+        <div className="bg-[#0C1117] border border-white/5 rounded-lg px-4 py-3 space-y-2">
+          <p className="text-xs text-neutral-500 uppercase tracking-wider">Configuração</p>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div>
+              <p className="text-neutral-600 mb-0.5">Auto Setup</p>
+              <p className={device.autoSetupDone ? 'text-emerald-400' : 'text-yellow-400'}>
+                {device.autoSetupDone ? '✓ Concluído' : '⏳ Pendente'}
+              </p>
+            </div>
+            {device.routerosIp && (
+              <div>
+                <p className="text-neutral-600 mb-0.5">IP RouterOS</p>
+                <code className="font-mono text-neutral-300">{device.routerosIp}</code>
+              </div>
+            )}
+            <div>
+              <p className="text-neutral-600 mb-0.5">Criado em</p>
+              <p className="text-neutral-300">{new Date(device.createdAt).toLocaleDateString('pt-BR')}</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </Modal>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function DevicesPage() {
   const activeCompany = useCompanyStore((s) => s.activeCompany)
   const companyId = activeCompany?.id ?? ''
   const [modal, setModal] = useState<
-    'add' | { edit: Device } | { autoSetup: Device; connDefaults?: ConnectionDefaults } | { delete: Device } | null
+    'add' | { details: Device } | { edit: Device } | { autoSetup: Device; connDefaults?: ConnectionDefaults } | { delete: Device } | null
   >(null)
 
   const { data: devices = [], isLoading } = useDevices(companyId)
@@ -551,7 +831,7 @@ export default function DevicesPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-white/5">
-                {['Nome', 'IP VPN', 'WireGuard', 'Auto Setup', 'Status', ''].map(h => (
+                {['Nome', 'IP VPN', 'Túnel', 'Auto Setup', 'Status', ''].map(h => (
                   <th key={h} className="px-5 py-3 text-left text-xs uppercase tracking-wider text-neutral-500 font-medium">{h}</th>
                 ))}
               </tr>
@@ -561,11 +841,26 @@ export default function DevicesPage() {
                 const { label, color, icon: Icon } = STATUS_CONFIG[device.status] ?? STATUS_CONFIG.PENDING
                 return (
                   <tr key={device.id} className="hover:bg-white/[0.02] transition-colors">
-                    <td className="px-5 py-3.5 font-medium text-white">{device.name}</td>
+                    <td className="px-5 py-3.5">
+                      <button
+                        onClick={() => setModal({ details: device })}
+                        className="font-medium text-white hover:text-emerald-400 transition-colors text-left"
+                      >
+                        {device.name}
+                      </button>
+                      {device.boardName && (
+                        <p className="text-xs text-neutral-600 mt-0.5">{device.boardName}</p>
+                      )}
+                    </td>
                     <td className="px-5 py-3.5 font-mono text-xs text-neutral-400">{device.wgIp ?? '—'}</td>
                     <td className="px-5 py-3.5">
-                      <span className={cn('text-xs font-medium', device.wgSetupDone ? 'text-emerald-400' : 'text-neutral-500')}>
-                        {device.wgSetupDone ? '✓ Configurado' : '⏳ Pendente'}
+                      <span className={cn(
+                        'inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold',
+                        device.tunnelType === 'l2tp'
+                          ? 'bg-sky-500/10 text-sky-400'
+                          : 'bg-violet-500/10 text-violet-400'
+                      )}>
+                        {device.tunnelType === 'l2tp' ? 'L2TP' : 'WG'}
                       </span>
                     </td>
                     <td className="px-5 py-3.5">
@@ -581,6 +876,13 @@ export default function DevicesPage() {
                     </td>
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-1 justify-end">
+                        <button
+                          onClick={() => setModal({ details: device })}
+                          title="Detalhes"
+                          className="p-1.5 text-neutral-500 hover:text-sky-400 hover:bg-sky-500/10 rounded-lg transition-colors"
+                        >
+                          <Info className="w-3.5 h-3.5" />
+                        </button>
                         <button
                           onClick={() => setModal({ autoSetup: device })}
                           title="Auto Setup"
@@ -612,6 +914,9 @@ export default function DevicesPage() {
         </div>
       )}
 
+      {modal !== null && modal !== 'add' && 'details' in modal && (
+        <DeviceDetailsModal device={modal.details} onClose={() => setModal(null)} />
+      )}
       {modal === 'add' && (
         <AddDeviceModal
           companyId={companyId}

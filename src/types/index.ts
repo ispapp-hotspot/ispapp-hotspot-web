@@ -39,13 +39,18 @@ export interface Company {
 // ── Device ────────────────────────────────────────────────────────────────────
 export type DeviceStatus = 'PENDING' | 'ONLINE' | 'OFFLINE' | 'ERROR'
 
+export type TunnelType = 'wireguard' | 'l2tp'
+
 export interface Device {
   id: string
   companyId: string
   name: string
   type: string
+  tunnelType: TunnelType
+  rosVersion?: number
   wgPublicKey?: string
   wgIp?: string
+  l2tpUser?: string
   status: DeviceStatus
   lastHandshake?: string
   wgSetupDone: boolean
@@ -55,15 +60,32 @@ export interface Device {
   routerosUser?: string
   portalId?: string
   createdAt: string
+  // Runtime metrics — coletadas a cada 5min via RouterOS REST (WireGuard v7 apenas)
+  rosVersionString?: string
+  uptimeSeconds?: number
+  cpuLoad?: number
+  freeMemoryMb?: number
+  totalMemoryMb?: number
+  freeHddMb?: number
+  boardName?: string
+  lastMetricsAt?: string
 }
 
 // Retornado apenas no provisionamento — exibir uma vez
 export interface DeviceProvisionResult {
   device: Device
-  wgPrivateKey: string
-  wgPublicKey: string
-  wgServerHost: string
-  wgServerPort: number
+  connectionType: TunnelType
+  // WireGuard
+  wgPrivateKey?: string
+  wgPublicKey?: string
+  wgServerHost?: string
+  wgServerPort?: number
+  // L2TP
+  l2tpServer?: string
+  l2tpUser?: string
+  l2tpPassword?: string
+  l2tpIpsecSecret?: string
+  // Common
   vpnIp: string
   nasSecret: string
 }
@@ -209,12 +231,15 @@ export interface HotspotVoucher {
 export type SessionStatus = 'active' | 'closed' | 'expired'
 
 export interface HotspotSession {
-  id: string
-  clientId: string
-  deviceId: string
-  planId?: string
+  id: number
+  sessionId: string
+  username: string
+  identifier: string
   macAddress?: string
   ipAddress?: string
+  nasIp?: string
+  deviceId?: string
+  deviceName?: string
   startAt: string
   stopAt?: string
   durationSec?: number
@@ -222,6 +247,13 @@ export interface HotspotSession {
   bytesOut: number
   status: SessionStatus
   terminateCause?: string
+}
+
+export interface SessionListResponse {
+  data: HotspotSession[]
+  total: number
+  page: number
+  size: number
 }
 
 // ── Payment Gateway Config ────────────────────────────────────────────────────
