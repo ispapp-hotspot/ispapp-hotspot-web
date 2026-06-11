@@ -7,9 +7,7 @@ const nextConfig: NextConfig = {
     // React Compiler — stable no Next.js 16
     reactCompiler: true,
 
-    // Cache Components — substitui PPR no Next.js 16
-    // Habilita "use cache" directive e Partial Prerendering
-    cacheComponents: true,
+    // cacheComponents: true,  // incompatível com Cloudflare Workers (setTimeout não suportado)
 
     // Proxy para o hotspot-api
     async rewrites() {
