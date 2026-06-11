@@ -16,3 +16,4 @@ CONTEXT.md
 !.dev.vars.example
 
 !.env.example
+.env.prod

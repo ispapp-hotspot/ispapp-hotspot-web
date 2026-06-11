@@ -7,7 +7,8 @@ const nextConfig: NextConfig = {
     // React Compiler — stable no Next.js 16
     reactCompiler: true,
 
-    // cacheComponents: true,  // incompatível com Cloudflare Workers (setTimeout não suportado)
+    // Cache Components — habilita "use cache" directive e Partial Prerendering
+    cacheComponents: true,
 
     // Proxy para o hotspot-api
     async rewrites() {
@@ -49,8 +50,3 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
-
-// Dev-only: inicializa bindings Cloudflare no ambiente local
-if (process.env.NODE_ENV === 'development') {
-    import('@opennextjs/cloudflare').then(m => m.initOpenNextCloudflareForDev());
-}
