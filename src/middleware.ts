@@ -1,19 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const PUBLIC_PATHS = ['/login', '/onboarding', '/api/auth']
+const PUBLIC_PATHS = ['/login', '/onboarding', '/api/auth', '/api/v1']
 
 export function middleware(req: NextRequest) {
   const token = req.cookies.get('hotspot_token')?.value
   const { pathname } = req.nextUrl
 
   const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p))
-
-  // Injeta Authorization header nas chamadas para o backend (via rewrite)
-  if (pathname.startsWith('/api/v1/')) {
-    const headers = new Headers(req.headers)
-    if (token) headers.set('Authorization', `Bearer ${token}`)
-    return NextResponse.next({ request: { headers } })
-  }
 
   if (!token && !isPublic) {
     return NextResponse.redirect(new URL('/login', req.url))

@@ -10,16 +10,6 @@ const nextConfig: NextConfig = {
     // Cache Components — habilita "use cache" directive e Partial Prerendering
     cacheComponents: true,
 
-    // Proxy para o hotspot-api
-    async rewrites() {
-        return [
-            {
-                source: "/api/v1/:path*",
-                destination: `${process.env.HOTSPOT_API_URL ?? 'http://localhost:8080'}/api/v1/:path*`,
-            },
-        ];
-    },
-
     // Headers de segurança
     async headers() {
         return [
