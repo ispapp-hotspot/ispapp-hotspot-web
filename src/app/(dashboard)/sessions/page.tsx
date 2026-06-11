@@ -1,9 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { useActiveSessions, useSessions } from '@/hooks/useSessions'
+import { useActiveSessions, useDisconnectSession, useSessions } from '@/hooks/useSessions'
 import { useCompanyStore } from '@/store/company'
-import { Activity, Wifi, WifiOff, Clock, Download, Upload, ChevronLeft, ChevronRight, Monitor } from 'lucide-react'
+import { Activity, Wifi, WifiOff, Clock, Download, Upload, ChevronLeft, ChevronRight, Monitor, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { HotspotSession, SessionStatus } from '@/types'
 
@@ -65,7 +65,15 @@ function StatCard({ label, value, icon: Icon, accent }: {
   )
 }
 
-function SessionRow({ session }: { session: HotspotSession }) {
+function SessionRow({
+  session,
+  onDisconnect,
+  disconnecting,
+}: {
+  session: HotspotSession
+  onDisconnect?: (id: number) => void
+  disconnecting?: boolean
+}) {
   return (
     <tr className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors">
       <td className="px-5 py-3">
@@ -100,6 +108,25 @@ function SessionRow({ session }: { session: HotspotSession }) {
         </div>
       </td>
       <td className="px-5 py-3 text-xs text-neutral-600">{session.terminateCause || '—'}</td>
+      <td className="px-5 py-3">
+        {onDisconnect && (
+          <button
+            onClick={() => {
+              if (confirm(`Desconectar ${session.identifier || session.username}?`)) {
+                onDisconnect(session.id)
+              }
+            }}
+            disabled={disconnecting}
+            title="Desconectar sessão"
+            className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            {disconnecting
+              ? <div className="w-3.5 h-3.5 border border-red-400 border-t-transparent rounded-full animate-spin" />
+              : <LogOut className="w-3.5 h-3.5" />
+            }
+          </button>
+        )}
+      </td>
     </tr>
   )
 }
@@ -122,6 +149,9 @@ export default function SessionsPage() {
     data: historyData,
     isLoading: historyLoading,
   } = useSessions(companyId, page, PAGE_SIZE)
+
+  const { mutate: disconnect, isPending: disconnecting, variables: disconnectingId } =
+    useDisconnectSession(companyId)
 
   const sessions     = tab === 'active' ? (activeData?.data ?? []) : (historyData?.data ?? [])
   const total        = tab === 'active' ? (activeData?.total ?? 0)  : (historyData?.total ?? 0)
@@ -246,8 +276,10 @@ export default function SessionsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-white/5">
-                  {['Status', 'Identificador / MAC', 'IP Cliente', 'Dispositivo', 'Início', 'Fim', 'Duração', 'Tráfego', 'Motivo'].map(h => (
-                    <th key={h} className="px-5 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider whitespace-nowrap">
+                  {['Status', 'Identificador / MAC', 'IP Cliente', 'Dispositivo', 'Início', 'Fim', 'Duração', 'Tráfego', 'Motivo',
+                    ...(tab === 'active' ? [''] : [])
+                  ].map((h, i) => (
+                    <th key={i} className="px-5 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider whitespace-nowrap">
                       {h}
                     </th>
                   ))}
@@ -255,7 +287,12 @@ export default function SessionsPage() {
               </thead>
               <tbody>
                 {sessions.map(session => (
-                  <SessionRow key={session.id} session={session} />
+                  <SessionRow
+                    key={session.id}
+                    session={session}
+                    onDisconnect={tab === 'active' ? disconnect : undefined}
+                    disconnecting={disconnecting && disconnectingId === session.id}
+                  />
                 ))}
               </tbody>
             </table>

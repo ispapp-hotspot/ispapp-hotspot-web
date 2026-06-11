@@ -12,7 +12,7 @@ import { createPortal } from 'react-dom'
 import {
   Plus, Globe, X, Pencil, Trash2, Loader2, AlertTriangle,
   User, FileText, CreditCard, Power, PowerOff, Users, Download,
-  Eye, ExternalLink, Copy, Check, Wifi, Building2,
+  Eye, ExternalLink, Copy, Check, Wifi, Building2, Gauge,
 } from 'lucide-react'
 import type { CaptivePortal, PortalType, HotspotLead, Campaign } from '@/types'
 import { Megaphone } from 'lucide-react'
@@ -55,6 +55,9 @@ const configSchema = z.object({
   showEmail:       z.boolean().default(true),
   showPhone:       z.boolean().default(true),
   showSuspendedInvoice: z.boolean().default(false),
+  bandwidthDown:   z.coerce.number().int().min(0).optional().default(0),
+  bandwidthUp:     z.coerce.number().int().min(0).optional().default(0),
+  durationMin:     z.coerce.number().int().min(0).optional().default(0),
 })
 
 const portalFormSchema = z.object({
@@ -90,6 +93,9 @@ function defaultConfig(type: string) {
     showEmail:       true,
     showPhone:       true,
     showSuspendedInvoice: false,
+    bandwidthDown:   0,
+    bandwidthUp:     0,
+    durationMin:     0,
   }
 }
 
@@ -112,6 +118,9 @@ function portalToForm(p: CaptivePortal): PortalForm {
       showEmail:       p.config.showEmail !== false,
       showPhone:       p.config.showPhone !== false,
       showSuspendedInvoice: p.config.showSuspendedInvoice === true,
+      bandwidthDown: Number(p.config.bandwidthDown ?? 0),
+      bandwidthUp:   Number(p.config.bandwidthUp   ?? 0),
+      durationMin:   Number(p.config.durationMin   ?? 0),
     },
   }
 }
@@ -459,6 +468,49 @@ function PortalFormModal({ portal, companyId, onClose }: {
                   </div>
                 </label>
               ))}
+            </div>
+          )}
+
+          {/* Parâmetros de conexão — LEAD_CAPTURE, LOGIN_CPF, ISP_LOGIN */}
+          {['LEAD_CAPTURE', 'LOGIN_CPF', 'ISP_LOGIN'].includes(watchedType) && (
+            <div className={sectionCls}>
+              <p className={labelCls}>
+                <span className="inline-flex items-center gap-1.5">
+                  <Gauge className="w-3 h-3" /> Parâmetros de Conexão
+                </span>
+              </p>
+              <p className="text-[10px] text-neutral-500 -mt-1">
+                Deixe 0 para sem limite. Aplicado via RADIUS ao conectar.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-neutral-500 mb-1 block">Download (kbps)</label>
+                  <input
+                    type="number" min={0}
+                    {...register('config.bandwidthDown')}
+                    className={inputCls}
+                    placeholder="Ex: 5120 = 5 Mbps"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-neutral-500 mb-1 block">Upload (kbps)</label>
+                  <input
+                    type="number" min={0}
+                    {...register('config.bandwidthUp')}
+                    className={inputCls}
+                    placeholder="Ex: 1024 = 1 Mbps"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-neutral-500 mb-1 block">Tempo de conexão (minutos)</label>
+                <input
+                  type="number" min={0}
+                  {...register('config.durationMin')}
+                  className={inputCls}
+                  placeholder="Ex: 60 = 1 hora. 0 = sem limite"
+                />
+              </div>
             </div>
           )}
 

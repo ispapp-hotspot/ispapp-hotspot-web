@@ -9,11 +9,19 @@ function fetchDevices(companyId: string) {
 function fetchDevice(companyId: string, deviceId: string) {
   return http.get<Device>(`/companies/${companyId}/devices/${deviceId}`).then((r) => r.data)
 }
-function provisionDevice(companyId: string, name: string, type = 'mikrotik', connectionType = 'wireguard') {
-  return http.post<DeviceProvisionResult>(`/companies/${companyId}/devices`, { name, type, connectionType }).then((r) => r.data)
+function provisionDevice(
+  companyId: string,
+  payload: {
+    name: string; type?: string; connectionType?: string; autoSetup?: boolean
+    hotspotInterface?: string; portalId?: string
+    routerosIp?: string; routerosPort?: number; routerosUser?: string; routerosPassword?: string
+  }
+) {
+  return http.post<DeviceProvisionResult>(`/companies/${companyId}/devices`, payload).then((r) => r.data)
 }
 function updateDevice(companyId: string, deviceId: string, data: {
-  name: string; routerosIp?: string; routerosPort?: number; routerosUser?: string; portalId?: string
+  name: string; routerosIp?: string; routerosPort?: number
+  routerosUser?: string; routerosPassword?: string; portalId?: string
 }) {
   return http.put<Device>(`/companies/${companyId}/devices/${deviceId}`, data).then((r) => r.data)
 }
@@ -58,8 +66,11 @@ export function useDevice(companyId: string, deviceId: string) {
 export function useProvisionDevice(companyId: string) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ name, type, connectionType }: { name: string; type?: string; connectionType?: string }) =>
-      provisionDevice(companyId, name, type, connectionType),
+    mutationFn: (payload: {
+      name: string; type?: string; connectionType?: string; autoSetup?: boolean
+      hotspotInterface?: string; portalId?: string
+      routerosIp?: string; routerosPort?: number; routerosUser?: string; routerosPassword?: string
+    }) => provisionDevice(companyId, payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: deviceKeys.all(companyId) })
     },
@@ -72,7 +83,7 @@ export function useUpdateDevice(companyId: string) {
   return useMutation({
     mutationFn: ({ deviceId, data }: {
       deviceId: string
-      data: { name: string; routerosIp?: string; routerosPort?: number; routerosUser?: string; portalId?: string }
+      data: { name: string; routerosIp?: string; routerosPort?: number; routerosUser?: string; routerosPassword?: string; portalId?: string }
     }) => updateDevice(companyId, deviceId, data),
     onSuccess: (_, { deviceId }) => {
       qc.invalidateQueries({ queryKey: deviceKeys.all(companyId) })

@@ -88,6 +88,10 @@ export interface DeviceProvisionResult {
   // Common
   vpnIp: string
   nasSecret: string
+  // Script for manual setup (autoSetup=false) — returned once, not stored
+  setupScript?: string
+  // Primary: short /tool fetch + /import command (fetches script via HTTP, bypasses terminal limits)
+  setupImportCommand?: string
 }
 
 // ── Portal ────────────────────────────────────────────────────────────────────
@@ -139,6 +143,10 @@ export interface PortalConfig {
   steps?:          string[]
   // ISP_LOGIN
   showSuspendedInvoice?: boolean
+  // Parâmetros de conexão (LEAD_CAPTURE, LOGIN_CPF, ISP_LOGIN)
+  bandwidthUp?:    number
+  bandwidthDown?:  number
+  durationMin?:    number
   [key: string]:   unknown
 }
 

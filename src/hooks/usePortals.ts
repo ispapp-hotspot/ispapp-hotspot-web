@@ -27,6 +27,12 @@ function fetchLeads(companyId: string, portalId: string) {
 function fetchAllLeads(companyId: string) {
   return http.get<HotspotLead[]>(`/companies/${companyId}/leads`).then((r) => r.data)
 }
+function deleteLead(companyId: string, leadId: string) {
+  return http.delete(`/companies/${companyId}/leads/${leadId}`)
+}
+function deleteLeadsBulk(companyId: string, ids: string[]) {
+  return http.delete<{ deleted: number }>(`/companies/${companyId}/leads`, { data: { ids } })
+}
 
 export const portalKeys = {
   all: (companyId: string) => ['portals', companyId] as const,
@@ -112,5 +118,29 @@ export function useAllLeads(companyId: string) {
     queryKey: portalKeys.allLeads(companyId),
     queryFn: () => fetchAllLeads(companyId),
     enabled: !!companyId,
+  })
+}
+
+export function useDeleteLead(companyId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (leadId: string) => deleteLead(companyId, leadId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: portalKeys.allLeads(companyId) })
+      toast.success('Lead removido.')
+    },
+    onError: () => toast.error('Erro ao remover lead.'),
+  })
+}
+
+export function useDeleteLeadsBulk(companyId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (ids: string[]) => deleteLeadsBulk(companyId, ids),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: portalKeys.allLeads(companyId) })
+      toast.success(`${res.data.deleted} lead(s) removido(s).`)
+    },
+    onError: () => toast.error('Erro ao remover leads.'),
   })
 }

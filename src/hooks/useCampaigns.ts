@@ -30,6 +30,15 @@ function removeCampaignMedia(companyId: string, id: string, mediaId: string) {
 function fetchCampaignStats(companyId: string, id: string) {
   return http.get<CampaignStats>(`/companies/${companyId}/campaigns/${id}/stats`).then((r) => r.data)
 }
+function uploadMedia(companyId: string, file: File): Promise<string> {
+  const form = new FormData()
+  form.append('file', file)
+  return http
+    .post<{ url: string }>(`/companies/${companyId}/media/upload`, form, {
+      headers: { 'Content-Type': undefined },
+    })
+    .then((r) => r.data.url)
+}
 
 export const campaignKeys = {
   all: (companyId: string) => ['campaigns', companyId] as const,
@@ -130,5 +139,12 @@ export function useRemoveCampaignMedia(companyId: string, campaignId: string) {
       toast.success('Mídia removida.')
     },
     onError: () => toast.error('Erro ao remover mídia.'),
+  })
+}
+
+export function useUploadMedia(companyId: string) {
+  return useMutation({
+    mutationFn: (file: File) => uploadMedia(companyId, file),
+    onError: () => toast.error('Erro ao fazer upload da mídia.'),
   })
 }

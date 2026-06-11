@@ -35,11 +35,26 @@ const addDeviceSchema = z.object({
   name:              z.string().min(2, 'Nome obrigatório'),
   type:              z.string().default('mikrotik'),
   connectionType:    z.enum(['wireguard', 'l2tp']).default('wireguard'),
-  routerosIp:        z.string().min(1, 'IP obrigatório'),
-  routerosUser:      z.string().min(1, 'Obrigatório'),
-  routerosPassword:  z.string().min(1, 'Obrigatório'),
-  routerosPort:      z.coerce.number().int().min(1).max(65535).default(8728),
+  autoSetup:         z.boolean().default(true),
+  routerosIp:        z.string().optional(),
+  routerosUser:      z.string().optional(),
+  routerosPassword:  z.string().optional(),
+  routerosPort:      z.coerce.number().int().min(1).max(65535).default(80),
+  hotspotInterface:  z.string().optional(),
   portalId:          z.string().min(1, 'Selecione um portal'),
+}).superRefine((data, ctx) => {
+  if (data.connectionType === 'wireguard' && data.autoSetup) {
+    if (!data.routerosIp?.trim())
+      ctx.addIssue({ code: 'custom', path: ['routerosIp'], message: 'IP obrigatório' })
+    if (!data.routerosUser?.trim())
+      ctx.addIssue({ code: 'custom', path: ['routerosUser'], message: 'Obrigatório' })
+    if (!data.routerosPassword?.trim())
+      ctx.addIssue({ code: 'custom', path: ['routerosPassword'], message: 'Obrigatório' })
+  }
+  if (data.connectionType === 'wireguard' && !data.autoSetup) {
+    if (!data.hotspotInterface?.trim())
+      ctx.addIssue({ code: 'custom', path: ['hotspotInterface'], message: 'Interface obrigatória' })
+  }
 })
 type AddDeviceForm = z.infer<typeof addDeviceSchema>
 type ConnectionDefaults = Pick<AddDeviceForm,
@@ -50,7 +65,7 @@ const autoSetupSchema = z.object({
   routerosIp:        z.string().optional(),
   routerosUser:      z.string().optional(),
   routerosPassword:  z.string().optional(),
-  routerosPort:      z.coerce.number().int().min(1).max(65535).default(8728),
+  routerosPort:      z.coerce.number().int().min(1).max(65535).default(80),
   // Hotspot
   hotspotInterface:  z.string().min(1, 'Obrigatório'),
   portalId:          z.string().min(1, 'Obrigatório'),
@@ -121,20 +136,27 @@ function AddDeviceModal({ companyId, onClose, onAutoSetup }: {
   const [result, setResult] = useState<{ provision: DeviceProvisionResult; conn: ConnectionDefaults } | null>(null)
   const [selectedType,   setSelectedType]   = useState<DeviceType>('mikrotik')
   const [selectedTunnel, setSelectedTunnel] = useState<TunnelTypeOption>('wireguard')
+  const [autoSetup,      setAutoSetup]      = useState(true)
 
   const { data: portals = [] } = usePortals(companyId)
 
   const { register, handleSubmit, setValue, formState: { errors } } = useForm<AddDeviceForm>({
     resolver: zodResolver(addDeviceSchema),
-    defaultValues: { type: 'mikrotik', connectionType: 'wireguard', routerosPort: 8728 },
+    defaultValues: { type: 'mikrotik', connectionType: 'wireguard', autoSetup: true, routerosPort: 80 },
   })
 
   const provision = useProvisionDevice(companyId)
 
+  const isWireguard = selectedTunnel === 'wireguard'
+  const showAutoSetup = isWireguard && autoSetup
+  const showManualScript = isWireguard && !autoSetup
+
   if (result) {
     const isL2tp = result.provision.connectionType === 'l2tp'
+    const hasScript = !!result.provision.setupScript
+    const importCmd = result.provision.setupImportCommand
     return (
-      <Modal title="Dispositivo provisionado" onClose={onClose}>
+      <Modal title="Dispositivo provisionado" onClose={onClose} maxWidth={hasScript ? 'max-w-2xl' : 'max-w-lg'}>
         <div className="space-y-4">
           <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
             <AlertTriangle className="w-4 h-4 text-yellow-400 shrink-0" />
@@ -166,6 +188,48 @@ function AddDeviceModal({ companyId, onClose, onAutoSetup }: {
             </>
           )}
 
+          {importCmd && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                <Info className="w-4 h-4 text-emerald-400 shrink-0" />
+                <p className="text-xs text-emerald-300">
+                  <strong>Passo 1:</strong> Cole este comando no <strong>Terminal do MikroTik</strong> (Winbox → New Terminal).
+                  O MikroTik baixará e executará o script de configuração automaticamente.
+                </p>
+              </div>
+              <div className="relative">
+                <pre className="bg-[#0C1117] border border-emerald-500/30 rounded-lg p-4 text-xs text-emerald-300 font-mono overflow-x-auto whitespace-pre">
+                  {importCmd}
+                </pre>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(importCmd); toast.success('Comando copiado!') }}
+                  className="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs text-neutral-300 transition-colors"
+                >
+                  <Copy className="w-3 h-3" /> Copiar
+                </button>
+              </div>
+            </div>
+          )}
+
+          {hasScript && (
+            <details className="group">
+              <summary className="cursor-pointer text-xs text-neutral-400 hover:text-neutral-200 select-none py-1">
+                Ver script completo (alternativa: colar manualmente linha a linha)
+              </summary>
+              <div className="relative mt-2">
+                <pre className="bg-[#0C1117] border border-white/10 rounded-lg p-4 text-xs text-emerald-300 font-mono overflow-auto max-h-64 whitespace-pre-wrap break-all">
+                  {result.provision.setupScript}
+                </pre>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(result.provision.setupScript!); toast.success('Script copiado!') }}
+                  className="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs text-neutral-300 transition-colors"
+                >
+                  <Copy className="w-3 h-3" /> Copiar tudo
+                </button>
+              </div>
+            </details>
+          )}
+
           <div className="flex gap-3 pt-2">
             <button
               onClick={onClose}
@@ -173,13 +237,15 @@ function AddDeviceModal({ companyId, onClose, onAutoSetup }: {
             >
               Confirmo que salvei
             </button>
-            <button
-              onClick={() => { onAutoSetup(result.provision.device, result.conn); onClose() }}
-              className="flex-1 h-10 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-            >
-              <RefreshCw className="w-4 h-4" />
-              {isL2tp ? 'Gerar Script' : 'Auto Setup agora'}
-            </button>
+            {!hasScript && (
+              <button
+                onClick={() => { onAutoSetup(result.provision.device, result.conn); onClose() }}
+                className="flex-1 h-10 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+              >
+                <RefreshCw className="w-4 h-4" />
+                {isL2tp ? 'Gerar Script' : 'Auto Setup agora'}
+              </button>
+            )}
           </div>
         </div>
       </Modal>
@@ -189,8 +255,19 @@ function AddDeviceModal({ companyId, onClose, onAutoSetup }: {
   return (
     <Modal title="Novo Dispositivo" onClose={onClose} maxWidth="max-w-md">
       <form onSubmit={handleSubmit((d) => provision.mutate(
-        { name: d.name, type: d.type, connectionType: d.connectionType },
-        { onSuccess: (r) => setResult({ provision: r, conn: { routerosIp: d.routerosIp, routerosUser: d.routerosUser, routerosPassword: d.routerosPassword, routerosPort: d.routerosPort, portalId: d.portalId } }) }
+        {
+          name: d.name, type: d.type, connectionType: d.connectionType,
+          autoSetup: d.autoSetup, hotspotInterface: d.hotspotInterface,
+          portalId: d.portalId,
+          routerosIp: d.routerosIp, routerosPort: d.routerosPort,
+          routerosUser: d.routerosUser, routerosPassword: d.routerosPassword,
+        },
+        {
+          onSuccess: (r) => setResult({
+            provision: r,
+            conn: { routerosIp: d.routerosIp, routerosUser: d.routerosUser, routerosPassword: d.routerosPassword, routerosPort: d.routerosPort, portalId: d.portalId }
+          })
+        }
       ))} className="space-y-5">
 
         {/* Nome */}
@@ -257,35 +334,98 @@ function AddDeviceModal({ companyId, onClose, onAutoSetup }: {
           </div>
         </div>
 
-        {/* Conexão */}
-        <div>
-          <p className={labelCls}>Conexão RouterOS API</p>
-          <div className="space-y-3">
-            <div className="grid grid-cols-3 gap-3">
-              <div className="col-span-2">
-                <label className="text-xs text-neutral-500 mb-1 block">IP do MikroTik</label>
-                <input {...register('routerosIp')} className={inputCls} placeholder="192.168.1.1" />
-                {errors.routerosIp && <p className="text-xs text-red-400 mt-1">{errors.routerosIp.message}</p>}
-              </div>
-              <div>
-                <label className="text-xs text-neutral-500 mb-1 block">Porta</label>
-                <input {...register('routerosPort')} type="number" className={inputCls} placeholder="8728" />
-              </div>
+        {/* Toggle IP público (WireGuard only) */}
+        {isWireguard && (
+          <div
+            className={cn(
+              'flex items-start gap-3 px-4 py-3 rounded-lg border cursor-pointer transition-all select-none',
+              autoSetup
+                ? 'border-emerald-500/30 bg-emerald-500/5'
+                : 'border-amber-500/30 bg-amber-500/5'
+            )}
+            onClick={() => {
+              const next = !autoSetup
+              setAutoSetup(next)
+              setValue('autoSetup', next)
+            }}
+          >
+            <div className={cn(
+              'mt-0.5 w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors',
+              autoSetup ? 'border-emerald-500 bg-emerald-500' : 'border-amber-500/50 bg-transparent'
+            )}>
+              {autoSetup && <Check className="w-2.5 h-2.5 text-white" />}
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-neutral-500 mb-1 block">Usuário</label>
-                <input {...register('routerosUser')} className={inputCls} placeholder="admin" />
-                {errors.routerosUser && <p className="text-xs text-red-400 mt-1">{errors.routerosUser.message}</p>}
-              </div>
-              <div>
-                <label className="text-xs text-neutral-500 mb-1 block">Senha</label>
-                <input {...register('routerosPassword')} type="password" className={inputCls} placeholder="••••••••" />
-                {errors.routerosPassword && <p className="text-xs text-red-400 mt-1">{errors.routerosPassword.message}</p>}
-              </div>
+            <div>
+              <p className={cn('text-sm font-medium', autoSetup ? 'text-emerald-400' : 'text-amber-400')}>
+                {autoSetup ? 'IP público disponível — Auto Setup' : 'Sem IP público — Gerar script'}
+              </p>
+              <p className="text-xs text-neutral-500 mt-0.5">
+                {autoSetup
+                  ? 'O sistema configura o MikroTik automaticamente via RouterOS API'
+                  : 'Você receberá um script para colar no terminal do MikroTik'}
+              </p>
             </div>
           </div>
-        </div>
+        )}
+
+        {/* Conexão RouterOS API */}
+        {isWireguard && (
+          <div>
+            <p className={labelCls}>Credenciais RouterOS</p>
+            <p className="text-xs text-neutral-600 mb-2">
+              {autoSetup
+                ? 'Necessário para o Auto Setup e para desconectar sessões remotamente'
+                : 'Necessário para desconectar sessões remotamente via túnel VPN'}
+            </p>
+            <div className="space-y-3">
+              {/* IP só exibido quando autoSetup — sem IP público não tem como alcançar antes do tunnel subir */}
+              {autoSetup && (
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="col-span-2">
+                    <label className="text-xs text-neutral-500 mb-1 block">IP do MikroTik</label>
+                    <input {...register('routerosIp')} className={inputCls} placeholder="192.168.1.1" />
+                    {errors.routerosIp && <p className="text-xs text-red-400 mt-1">{errors.routerosIp.message}</p>}
+                  </div>
+                  <div>
+                    <label className="text-xs text-neutral-500 mb-1 block">Porta</label>
+                    <input {...register('routerosPort')} type="number" className={inputCls} placeholder="80" />
+                  </div>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-neutral-500 mb-1 block">Usuário</label>
+                  <input {...register('routerosUser')} className={inputCls} placeholder="admin" />
+                  {errors.routerosUser && <p className="text-xs text-red-400 mt-1">{errors.routerosUser.message}</p>}
+                </div>
+                <div>
+                  <label className="text-xs text-neutral-500 mb-1 block">Senha</label>
+                  <input {...register('routerosPassword')} type="password" className={inputCls} placeholder="••••••••" />
+                  {errors.routerosPassword && <p className="text-xs text-red-400 mt-1">{errors.routerosPassword.message}</p>}
+                </div>
+              </div>
+              {!autoSetup && (
+                <p className="text-xs text-neutral-600">
+                  Sem IP público — o sistema usará o IP VPN alocado via túnel WireGuard para alcançar o MikroTik
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Interface hotspot (quando autoSetup=false para WireGuard) */}
+        {showManualScript && (
+          <div>
+            <label className={labelCls}>Interface do Hotspot</label>
+            <input
+              {...register('hotspotInterface')}
+              className={inputCls}
+              placeholder="ether1"
+            />
+            <p className="text-xs text-neutral-500 mt-1">Interface onde o hotspot será ativado (ex: ether2-local, bridge-local)</p>
+            {errors.hotspotInterface && <p className="text-xs text-red-400 mt-1">{errors.hotspotInterface.message}</p>}
+          </div>
+        )}
 
         {/* Portal padrão */}
         <div>
@@ -325,7 +465,7 @@ function AutoSetupModal({ device, companyId, onClose, connDefaults }: {
     resolver: zodResolver(autoSetupSchema),
     defaultValues: {
       routerosIp:       connDefaults?.routerosIp      ?? '',
-      routerosPort:     connDefaults?.routerosPort     ?? 8728,
+      routerosPort:     connDefaults?.routerosPort     ?? 80,
       routerosUser:     connDefaults?.routerosUser     ?? '',
       routerosPassword: connDefaults?.routerosPassword ?? '',
       portalId:         connDefaults?.portalId         ?? '',
@@ -511,11 +651,12 @@ function DeleteConfirmModal({ device, onConfirm, onClose, isPending }: {
 
 // ── Edit modal ────────────────────────────────────────────────────────────────
 const editDeviceSchema = z.object({
-  name:         z.string().min(2, 'Nome obrigatório'),
-  routerosIp:   z.string().optional(),
-  routerosPort: z.coerce.number().int().min(1).max(65535).default(8728),
-  routerosUser: z.string().optional(),
-  portalId:     z.string().optional(),
+  name:             z.string().min(2, 'Nome obrigatório'),
+  routerosIp:       z.string().optional(),
+  routerosPort:     z.coerce.number().int().min(1).max(65535).default(80),
+  routerosUser:     z.string().optional(),
+  routerosPassword: z.string().optional(),
+  portalId:         z.string().optional(),
 })
 type EditDeviceForm = z.infer<typeof editDeviceSchema>
 
@@ -529,7 +670,7 @@ function EditDeviceModal({ device, companyId, onClose }: {
     defaultValues: {
       name:         device.name,
       routerosIp:   device.routerosIp  ?? '',
-      routerosPort: device.routerosPort ?? 8728,
+      routerosPort: device.routerosPort ?? 80,
       routerosUser: device.routerosUser ?? '',
       portalId:     device.portalId    ?? '',
     },
@@ -562,10 +703,16 @@ function EditDeviceModal({ device, companyId, onClose }: {
                 <input {...register('routerosPort')} type="number" className={inputCls} placeholder="8728" />
               </div>
             </div>
-            <div>
-              <label className="text-xs text-neutral-500 mb-1 block">Usuário</label>
-              <input {...register('routerosUser')} className={inputCls} placeholder="admin" />
-            </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-neutral-500 mb-1 block">Usuário</label>
+                  <input {...register('routerosUser')} className={inputCls} placeholder="admin" />
+                </div>
+                <div>
+                  <label className="text-xs text-neutral-500 mb-1 block">Senha</label>
+                  <input {...register('routerosPassword')} type="password" className={inputCls} placeholder="deixe em branco para manter" />
+                </div>
+              </div>
           </div>
         </div>
 

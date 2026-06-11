@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import http from '@/lib/http'
 import type { SessionListResponse } from '@/types'
 
@@ -30,7 +31,7 @@ export function useActiveSessions(companyId: string, page = 0, size = 20) {
     queryKey: sessionKeys.active(companyId, page, size),
     queryFn: () => fetchActiveSessions(companyId, page, size),
     enabled: !!companyId,
-    refetchInterval: 30_000,
+    refetchInterval: 15_000,
   })
 }
 
@@ -39,5 +40,26 @@ export function useSessions(companyId: string, page = 0, size = 20) {
     queryKey: sessionKeys.history(companyId, page, size),
     queryFn: () => fetchSessionHistory(companyId, page, size),
     enabled: !!companyId,
+  })
+}
+
+export function useDisconnectSession(companyId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (sessionId: number) =>
+      http.delete(`/companies/${companyId}/sessions/${sessionId}`),
+    onSuccess: () => {
+      toast.success('Sessão desconectada com sucesso')
+      qc.invalidateQueries({ queryKey: ['sessions', companyId] })
+    },
+    onError: (err: unknown) => {
+      const status = (err as { response?: { status?: number } })?.response?.status
+      const msg = status === 502
+        ? 'Dispositivo não encontrou a sessão ativa. Pode já ter sido encerrada.'
+        : status === 404
+        ? 'Sessão não encontrada.'
+        : 'Erro ao desconectar sessão'
+      toast.error(msg)
+    },
   })
 }

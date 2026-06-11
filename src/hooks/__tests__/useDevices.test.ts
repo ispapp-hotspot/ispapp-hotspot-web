@@ -66,19 +66,43 @@ describe('useDevices', () => {
 describe('useProvisionDevice', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('provisions wireguard device', async () => {
+  it('provisions wireguard device with autoSetup=true', async () => {
     vi.mocked(http.post).mockResolvedValue({ data: mockProvision })
 
     const { result } = renderHook(() => useProvisionDevice(COMPANY_ID), { wrapper: wrapper() })
 
-    result.current.mutate({ name: 'CCR2116', type: 'mikrotik', connectionType: 'wireguard' })
+    result.current.mutate({ name: 'CCR2116', type: 'mikrotik', connectionType: 'wireguard', autoSetup: true })
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(http.post).toHaveBeenCalledWith(
       `/companies/${COMPANY_ID}/devices`,
-      { name: 'CCR2116', type: 'mikrotik', connectionType: 'wireguard' },
+      { name: 'CCR2116', type: 'mikrotik', connectionType: 'wireguard', autoSetup: true },
     )
     expect(result.current.data?.connectionType).toBe('wireguard')
+    expect(result.current.data?.setupScript).toBeUndefined()
+  })
+
+  it('provisions wireguard device with autoSetup=false — receives setupScript', async () => {
+    const provisionWithScript: DeviceProvisionResult = {
+      ...mockProvision,
+      setupScript: '# RouterOS script\n/interface wireguard\nadd name="wg-ispapp"',
+    }
+    vi.mocked(http.post).mockResolvedValue({ data: provisionWithScript })
+
+    const { result } = renderHook(() => useProvisionDevice(COMPANY_ID), { wrapper: wrapper() })
+
+    result.current.mutate({
+      name: 'CCR2116', type: 'mikrotik', connectionType: 'wireguard',
+      autoSetup: false, hotspotInterface: 'ether1', portalId: 'portal-abc',
+    })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(http.post).toHaveBeenCalledWith(
+      `/companies/${COMPANY_ID}/devices`,
+      { name: 'CCR2116', type: 'mikrotik', connectionType: 'wireguard',
+        autoSetup: false, hotspotInterface: 'ether1', portalId: 'portal-abc' },
+    )
+    expect(result.current.data?.setupScript).toContain('/interface wireguard')
   })
 
   it('provisions l2tp device', async () => {

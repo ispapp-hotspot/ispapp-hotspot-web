@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, use } from 'react'
-import { useCampaigns, useUpdateCampaign, useCampaignMedia, useAddCampaignMedia, useRemoveCampaignMedia } from '@/hooks/useCampaigns'
+import { useState, use, useRef } from 'react'
+import { useCampaigns, useUpdateCampaign, useCampaignMedia, useAddCampaignMedia, useRemoveCampaignMedia, useUploadMedia } from '@/hooks/useCampaigns'
 import { useCompanyStore } from '@/store/company'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
-  ArrowLeft, Loader2, Image, Video, Trash2, GripVertical, Pencil, Check, X,
+  ArrowLeft, Loader2, Image, Video, Trash2, GripVertical, Pencil, Check, X, Upload,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -20,18 +20,32 @@ export default function CampaignEditPage({ params }: { params: Promise<{ id: str
 
   const [editName, setEditName]       = useState('')
   const [editingName, setEditingName] = useState(false)
-  const [mediaUrl, setMediaUrl]       = useState('')
   const [mediaType, setMediaType]     = useState<'image' | 'video'>('image')
   const [mediaDur, setMediaDur]       = useState(5)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { data: campaigns = [] } = useCampaigns(companyId)
   const campaign = campaigns.find(c => c.id === id)
 
   const { data: media = [], isLoading: mediaLoading } = useCampaignMedia(companyId, id)
 
-  const updateName  = useUpdateCampaign(companyId)
-  const addMedia    = useAddCampaignMedia(companyId, id)
-  const removeMedia = useRemoveCampaignMedia(companyId, id)
+  const updateName   = useUpdateCampaign(companyId)
+  const addMedia     = useAddCampaignMedia(companyId, id)
+  const removeMedia  = useRemoveCampaignMedia(companyId, id)
+  const uploadMedia  = useUploadMedia(companyId)
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    uploadMedia.mutate(file, {
+      onSuccess: (url) => {
+        addMedia.mutate(
+          { url, type: mediaType, durationSec: mediaDur, sortOrder: media.length },
+          { onSuccess: () => { if (fileInputRef.current) fileInputRef.current.value = '' } }
+        )
+      },
+    })
+  }
 
   if (!activeCompany) return null
 
@@ -173,14 +187,6 @@ export default function CampaignEditPage({ params }: { params: Promise<{ id: str
             ))}
           </div>
 
-          <input
-            value={mediaUrl}
-            onChange={e => setMediaUrl(e.target.value)}
-            className={inputCls}
-            placeholder="URL da imagem ou vídeo (https://...)"
-            onKeyDown={e => e.key === 'Enter' && mediaUrl.trim() && addMedia.mutate({ url: mediaUrl.trim(), type: mediaType, durationSec: mediaDur, sortOrder: media.length }, { onSuccess: () => setMediaUrl('') })}
-          />
-
           <div className="flex items-center gap-3">
             <label className="text-xs text-neutral-400 shrink-0">Duração (seg):</label>
             <input
@@ -188,15 +194,25 @@ export default function CampaignEditPage({ params }: { params: Promise<{ id: str
               onChange={e => setMediaDur(Number(e.target.value))}
               className="w-20 h-9 px-3 rounded-lg bg-[#1a2130] border border-white/10 text-white text-sm outline-none"
             />
-            <button
-              onClick={() => addMedia.mutate({ url: mediaUrl.trim(), type: mediaType, durationSec: mediaDur, sortOrder: media.length }, { onSuccess: () => setMediaUrl('') })}
-              disabled={!mediaUrl.trim() || addMedia.isPending}
-              className="flex-1 h-9 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg disabled:opacity-50 transition-colors"
-            >
-              {addMedia.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              Adicionar
-            </button>
           </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={mediaType === 'image' ? 'image/*' : 'video/*'}
+            className="hidden"
+            onChange={handleFileChange}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploadMedia.isPending || addMedia.isPending}
+            className="w-full h-10 flex items-center justify-center gap-2 border border-dashed border-white/20 hover:border-emerald-500/50 hover:bg-emerald-500/5 text-neutral-400 hover:text-emerald-400 text-sm rounded-lg transition-colors disabled:opacity-50"
+          >
+            {(uploadMedia.isPending || addMedia.isPending)
+              ? <><Loader2 className="w-4 h-4 animate-spin" />Enviando...</>
+              : <><Upload className="w-4 h-4" />Selecionar {mediaType === 'image' ? 'imagem' : 'vídeo'}</>
+            }
+          </button>
         </div>
       </div>
 

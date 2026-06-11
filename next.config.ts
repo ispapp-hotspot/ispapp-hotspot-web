@@ -45,6 +45,7 @@ const nextConfig: NextConfig = {
     images: {
         remotePatterns: [
             { protocol: "https", hostname: "portal.ispapp.com.br" },
+            { protocol: "https", hostname: "cdn.ispapp.com.br" },
         ],
     },
 };
