@@ -4,8 +4,9 @@ import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useCreateCompany } from '@/hooks/useCompanies'
+import { useCreateCompany, companyKeys } from '@/hooks/useCompanies'
 import { useCompanyStore } from '@/store/company'
+import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ShieldCheck, Building2, Loader2 } from 'lucide-react'
 import type { Company } from '@/types'
@@ -30,6 +31,7 @@ const labelCls = 'text-xs uppercase tracking-wider text-neutral-400 mb-1.5 block
 
 export default function OnboardingPage() {
   const router = useRouter()
+  const qc = useQueryClient()
   const setActiveCompany = useCompanyStore((s) => s.setActiveCompany)
 
   const {
@@ -72,7 +74,13 @@ export default function OnboardingPage() {
             Você precisará de pelo menos uma empresa para gerenciar dispositivos e portais.
           </p>
 
-          <form onSubmit={handleSubmit((data) => create.mutate(data, { onSuccess: (company) => { setActiveCompany(company); router.push('/dashboard') } }))} className="space-y-5">
+          <form onSubmit={handleSubmit((data) => create.mutate(data, {
+            onSuccess: async (company) => {
+              setActiveCompany(company)
+              await qc.refetchQueries({ queryKey: companyKeys.all() })
+              router.push('/dashboard')
+            },
+          }))} className="space-y-5">
             <div>
               <label className={labelCls}>Nome da empresa</label>
               <input

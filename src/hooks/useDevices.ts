@@ -73,6 +73,7 @@ export function useProvisionDevice(companyId: string) {
     }) => provisionDevice(companyId, payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: deviceKeys.all(companyId) })
+      qc.refetchQueries({ queryKey: deviceKeys.all(companyId) })
     },
     onError: () => toast.error('Erro ao provisionar dispositivo.'),
   })
@@ -98,7 +99,10 @@ export function useDeleteDevice(companyId: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (deviceId: string) => deleteDevice(companyId, deviceId),
-    onSuccess: () => {
+    onSuccess: (_, deviceId) => {
+      qc.setQueryData<Device[]>(deviceKeys.all(companyId), (old) =>
+        old ? old.filter((d) => d.id !== deviceId) : []
+      )
       qc.invalidateQueries({ queryKey: deviceKeys.all(companyId) })
       toast.success('Dispositivo removido.')
     },
