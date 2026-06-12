@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
 
 export default function IntegrationsPage() {
-  redirect('/settings/integrations/erp')
+  redirect('/settings/integrations/gateways')
 }

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { usePaymentGateways, useActivateGateway, useUpsertGateway, useValidateGateway, useDeleteGateway } from '@/hooks/useIntegrations'
+import { useCompanyStore } from '@/store/company'
 import { toast } from 'sonner'
 import Link from 'next/link'
 import {
@@ -14,12 +15,15 @@ const inputCls = 'w-full h-11 px-3 rounded-lg bg-[#1a2130] border border-white/1
 const labelCls = 'text-xs uppercase tracking-wider text-neutral-400 mb-1.5 block'
 
 export default function MercadoPagoPage() {
-  const { data: gateways = [], isLoading } = usePaymentGateways()
+  const activeCompany = useCompanyStore(s => s.activeCompany)
+  const companyId = activeCompany?.id ?? ''
+
+  const { data: gateways = [], isLoading } = usePaymentGateways(companyId)
   const gateway = gateways.find(g => g.gatewayType === 'MERCADO_PAGO') ?? null
 
-  const activate  = useActivateGateway()
-  const save      = useUpsertGateway()
-  const { data: validateData, refetch: testCreds, isFetching: testPending } = useValidateGateway()
+  const activate  = useActivateGateway(companyId)
+  const save      = useUpsertGateway(companyId)
+  const { data: validateData, refetch: testCreds, isFetching: testPending } = useValidateGateway(companyId)
 
   const [copied, setCopied] = useState(false)
   const [publicKey,   setPublicKey]   = useState('')
@@ -31,10 +35,13 @@ export default function MercadoPagoPage() {
     if (gateway) {
       setPublicKey(gateway.publicKey ?? '')
       setSecretToken('')
+    } else {
+      setPublicKey('')
+      setSecretToken('')
     }
-  }, [gateway])
+  }, [gateway, companyId])
 
-  const remove = useDeleteGateway()
+  const remove = useDeleteGateway(companyId)
 
   function validate() {
     const errs: Record<string, string> = {}
@@ -99,7 +106,7 @@ export default function MercadoPagoPage() {
       </div>
 
       {/* Status */}
-      {!isLoading && (
+      {!isLoading && companyId && (
         <div className={cn(
           'flex items-center gap-3 px-4 py-3 rounded-xl border text-sm',
           gateway?.isActive
@@ -132,6 +139,7 @@ export default function MercadoPagoPage() {
               placeholder="APP_USR-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
               value={publicKey}
               onChange={e => setPublicKey(e.target.value)}
+              disabled={!companyId}
             />
             {errors.publicKey && <p className="text-xs text-red-400 mt-1.5">{errors.publicKey}</p>}
             <p className="text-xs text-neutral-600 mt-1.5">
@@ -157,6 +165,7 @@ export default function MercadoPagoPage() {
                 value={secretToken}
                 onChange={e => setSecretToken(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                disabled={!companyId}
               />
               <button
                 type="button"
@@ -175,7 +184,7 @@ export default function MercadoPagoPage() {
           <div className="flex gap-3 pt-1">
             <button
               onClick={handleSubmit}
-              disabled={save.isPending}
+              disabled={save.isPending || !companyId}
               className="flex-1 h-11 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-semibold rounded-lg transition-all flex items-center justify-center gap-2"
             >
               {save.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -283,16 +292,16 @@ export default function MercadoPagoPage() {
               <Link2 className="w-4 h-4 text-emerald-400 shrink-0" />
               <p className="text-sm font-semibold text-white">URL do Webhook</p>
             </div>
-            {gateway?.ispId ? (
+            {gateway?.webhookUrl ? (
               <>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 text-xs font-mono text-emerald-300 bg-[#0C1117] border border-white/[0.06] rounded-lg px-3 py-2.5 break-all">
-                    {`${process.env.NEXT_PUBLIC_HOTSPOT_API_URL ?? 'https://api.hotspot.ispapp.com.br'}/webhook/payment/${gateway!.ispId}`}
+                    {gateway.webhookUrl}
                   </code>
                   <button
                     type="button"
                     onClick={() => {
-                      navigator.clipboard.writeText(`${process.env.NEXT_PUBLIC_HOTSPOT_API_URL ?? 'https://api.hotspot.ispapp.com.br'}/webhook/payment/${gateway!.ispId}`)
+                      navigator.clipboard.writeText(gateway.webhookUrl)
                       setCopied(true)
                       setTimeout(() => setCopied(false), 2000)
                     }}
@@ -308,7 +317,7 @@ export default function MercadoPagoPage() {
                 </p>
               </>
             ) : (
-              <p className="text-xs text-neutral-500">Carregando...</p>
+              <p className="text-xs text-neutral-500">Configure o gateway para exibir a URL.</p>
             )}
           </div>
         </div>

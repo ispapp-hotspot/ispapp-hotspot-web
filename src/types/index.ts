@@ -267,11 +267,12 @@ export interface SessionListResponse {
 // ── Payment Gateway Config ────────────────────────────────────────────────────
 export interface PaymentGatewayConfig {
   id:          string
-  ispId:       string
+  companyId:   string
   gatewayType: string
   publicKey:   string
   active:      boolean
   isActive:    boolean
+  webhookUrl:  string
 }
 
 // ── Financial ─────────────────────────────────────────────────────────────────

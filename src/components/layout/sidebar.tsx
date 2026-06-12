@@ -12,20 +12,23 @@ import {
 } from 'lucide-react'
 import { CompanySwitcher } from './company-switcher'
 
-const NAV = [
-  { href: '/dashboard',  label: 'Dashboard',    icon: LayoutDashboard },
-  { href: '/devices',    label: 'Dispositivos',  icon: Wifi },
-  { href: '/portals',    label: 'Portais',       icon: Globe },
-  { href: '/leads',      label: 'Leads',         icon: Users },
-  { href: '/campaigns',  label: 'Campanhas',     icon: Megaphone },
-  { href: '/plans',      label: 'Planos',        icon: Package },
-  { href: '/sessions',   label: 'Sessões',       icon: Activity },
-  { href: '/financial',  label: 'Financeiro',    icon: CreditCard },
+const NAV_ITEMS = [
+  { href: '/dashboard',  label: 'Dashboard',   icon: LayoutDashboard },
+  { href: '/devices',    label: 'Dispositivos', icon: Wifi },
+  { href: '/portals',    label: 'Portais',      icon: Globe },
+  { href: '/leads',      label: 'Leads',        icon: Users },
+  { href: '/campaigns',  label: 'Campanhas',    icon: Megaphone },
+  { href: '/plans',      label: 'Planos',       icon: Package },
+  { href: '/sessions',   label: 'Sessões',      icon: Activity },
+]
+
+const FINANCIAL_ITEMS = [
+  { href: '/financial',                        label: 'Transações',            icon: CreditCard },
+  { href: '/settings/integrations/gateways',   label: 'Gateways de Pagamento', icon: CreditCard },
 ]
 
 const SETTINGS_ITEMS = [
-  { href: '/settings/integrations/erp',      label: 'ERP',                icon: Plug },
-  { href: '/settings/integrations/gateways', label: 'Gateways de Pagamento', icon: CreditCard },
+  { href: '/settings/erp', label: 'ERP', icon: Plug },
 ]
 
 const NAV_BOTTOM = [
@@ -36,11 +39,13 @@ const NAV_BOTTOM = [
 
 export function Sidebar() {
   const pathname = usePathname()
-  const user     = useAuthStore((s) => s.user)
   const logout   = useAuthStore((s) => s.logout)
 
-  const isSettingsActive = pathname.startsWith('/settings/integrations')
-  const [settingsOpen, setSettingsOpen] = useState(isSettingsActive)
+  const isFinancialActive = pathname.startsWith('/financial') || pathname.startsWith('/settings/integrations/gateways')
+  const isSettingsActive  = pathname.startsWith('/settings/erp')
+
+  const [financialOpen, setFinancialOpen] = useState(isFinancialActive)
+  const [settingsOpen,  setSettingsOpen]  = useState(isSettingsActive)
 
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' })
@@ -65,7 +70,7 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 px-3 py-4 space-y-0.5">
-        {NAV.map(({ href, label, icon: Icon }) => (
+        {NAV_ITEMS.map(({ href, label, icon: Icon }) => (
           <Link
             key={href}
             href={href}
@@ -81,25 +86,25 @@ export function Sidebar() {
           </Link>
         ))}
 
-        {/* Settings group */}
+        {/* Financeiro group */}
         <div>
           <button
-            onClick={() => setSettingsOpen(v => !v)}
+            onClick={() => setFinancialOpen(v => !v)}
             className={cn(
               'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors w-full',
-              isSettingsActive
+              isFinancialActive
                 ? 'bg-emerald-500/10 text-emerald-400'
                 : 'text-neutral-400 hover:bg-white/5 hover:text-white'
             )}
           >
-            <Settings className="w-4 h-4 shrink-0" />
-            <span className="flex-1 text-left">Configurações</span>
-            <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', settingsOpen && 'rotate-180')} />
+            <CreditCard className="w-4 h-4 shrink-0" />
+            <span className="flex-1 text-left">Financeiro</span>
+            <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', financialOpen && 'rotate-180')} />
           </button>
 
-          {settingsOpen && (
+          {financialOpen && (
             <div className="mt-0.5 ml-4 pl-3 border-l border-white/5 space-y-0.5">
-              {SETTINGS_ITEMS.map(({ href, label, icon: Icon }) => (
+              {FINANCIAL_ITEMS.map(({ href, label, icon: Icon }) => (
                 <Link
                   key={href}
                   href={href}
@@ -117,10 +122,47 @@ export function Sidebar() {
             </div>
           )}
         </div>
+
       </nav>
 
       <div className="border-t border-white/5 pt-3 space-y-0.5">
         <div className="px-3 space-y-0.5">
+          {/* Configurações group */}
+          <div>
+            <button
+              onClick={() => setSettingsOpen(v => !v)}
+              className={cn(
+                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors w-full',
+                isSettingsActive
+                  ? 'bg-emerald-500/10 text-emerald-400'
+                  : 'text-neutral-500 hover:bg-white/5 hover:text-neutral-300'
+              )}
+            >
+              <Settings className="w-4 h-4 shrink-0" />
+              <span className="flex-1 text-left">Configurações</span>
+              <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', settingsOpen && 'rotate-180')} />
+            </button>
+            {settingsOpen && (
+              <div className="mt-0.5 ml-4 pl-3 border-l border-white/5 space-y-0.5">
+                {SETTINGS_ITEMS.map(({ href, label, icon: Icon }) => (
+                  <Link
+                    key={href}
+                    href={href}
+                    className={cn(
+                      'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                      isActive(href)
+                        ? 'bg-emerald-500/10 text-emerald-400'
+                        : 'text-neutral-500 hover:bg-white/5 hover:text-neutral-300'
+                    )}
+                  >
+                    <Icon className="w-4 h-4 shrink-0" />
+                    {label}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+
           {NAV_BOTTOM.map(({ href, label, icon: Icon }) => (
             <Link
               key={href}

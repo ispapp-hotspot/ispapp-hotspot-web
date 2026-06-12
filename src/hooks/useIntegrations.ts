@@ -56,82 +56,86 @@ export function useDeleteIspIntegration() {
 
 // ── Payment Gateway ───────────────────────────────────────────────────────────
 
-function fetchPaymentGateways() {
-  return http.get<PaymentGatewayConfig[]>('/payment-gateway').then((r) => r.data)
+const gwBase = (companyId: string) => `/companies/${companyId}/payment-gateway`
+
+function fetchPaymentGateways(companyId: string) {
+  return http.get<PaymentGatewayConfig[]>(gwBase(companyId)).then((r) => r.data)
 }
-function validateGateway() {
+function validateGateway(companyId: string) {
   return http.get<{ valid: boolean; userId?: string; email?: string; nickname?: string; error?: string }>(
-    '/payment-gateway/validate'
+    `${gwBase(companyId)}/validate`
   ).then((r) => r.data)
 }
-function upsertGateway(data: { gatewayType?: string; publicKey: string; secretToken: string }) {
-  return http.put<PaymentGatewayConfig>('/payment-gateway', data).then((r) => r.data)
+function upsertGateway(companyId: string, data: { gatewayType?: string; publicKey: string; secretToken: string }) {
+  return http.put<PaymentGatewayConfig>(gwBase(companyId), data).then((r) => r.data)
 }
-function activateGateway(type: string) {
-  return http.post<PaymentGatewayConfig>(`/payment-gateway/${type}/activate`).then((r) => r.data)
+function activateGateway(companyId: string, type: string) {
+  return http.post<PaymentGatewayConfig>(`${gwBase(companyId)}/${type}/activate`).then((r) => r.data)
 }
-function deleteGateway(type?: string) {
+function deleteGateway(companyId: string, type?: string) {
   return type
-    ? http.delete(`/payment-gateway/${type}`)
-    : http.delete('/payment-gateway')
+    ? http.delete(`${gwBase(companyId)}/${type}`)
+    : http.delete(gwBase(companyId))
 }
 
 export const gatewayKeys = {
-  all: () => ['payment-gateways'] as const,
-  validate: () => ['payment-gateways', 'validate'] as const,
+  all: (companyId: string) => ['payment-gateways', companyId] as const,
+  validate: (companyId: string) => ['payment-gateways', companyId, 'validate'] as const,
 }
 
-export function usePaymentGateways() {
+export function usePaymentGateways(companyId: string) {
   return useQuery({
-    queryKey: gatewayKeys.all(),
-    queryFn: () => fetchPaymentGateways().catch((err: { response?: { status?: number } }) => {
+    queryKey: gatewayKeys.all(companyId),
+    queryFn: () => fetchPaymentGateways(companyId).catch((err: { response?: { status?: number } }) => {
       if (err?.response?.status === 404) return []
       throw err
     }),
+    enabled: !!companyId,
   })
 }
 
-export function useValidateGateway() {
+export function useValidateGateway(companyId: string) {
   return useQuery({
-    queryKey: gatewayKeys.validate(),
-    queryFn: validateGateway,
+    queryKey: gatewayKeys.validate(companyId),
+    queryFn: () => validateGateway(companyId),
     retry: false,
+    enabled: !!companyId,
   })
 }
 
-export function useUpsertGateway() {
+export function useUpsertGateway(companyId: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: { gatewayType?: string; publicKey: string; secretToken: string }) =>
-      upsertGateway(data),
+      upsertGateway(companyId, data),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: gatewayKeys.all() })
-      qc.invalidateQueries({ queryKey: gatewayKeys.validate() })
+      qc.invalidateQueries({ queryKey: gatewayKeys.all(companyId) })
+      qc.invalidateQueries({ queryKey: gatewayKeys.validate(companyId) })
       toast.success('Gateway salvo!')
     },
     onError: () => toast.error('Erro ao salvar gateway.'),
   })
 }
 
-export function useActivateGateway() {
+export function useActivateGateway(companyId: string) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (type: string) => activateGateway(type),
+    mutationFn: (type: string) => activateGateway(companyId, type),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: gatewayKeys.all() })
+      qc.invalidateQueries({ queryKey: gatewayKeys.all(companyId) })
       toast.success('Gateway ativado!')
     },
     onError: () => toast.error('Erro ao ativar gateway.'),
   })
 }
 
-export function useDeleteGateway() {
+export function useDeleteGateway(companyId: string) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (type?: string) => deleteGateway(type),
+    mutationFn: (type?: string) => deleteGateway(companyId, type),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: gatewayKeys.all() })
-      qc.invalidateQueries({ queryKey: gatewayKeys.validate() })
+      qc.invalidateQueries({ queryKey: gatewayKeys.all(companyId) })
+      qc.invalidateQueries({ queryKey: gatewayKeys.validate(companyId) })
       toast.success('Gateway removido.')
     },
     onError: () => toast.error('Erro ao remover gateway.'),
