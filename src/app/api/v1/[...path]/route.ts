@@ -31,6 +31,10 @@ async function proxy(
     body: body ? Buffer.from(body) : undefined,
   })
 
+  if (upstream.status === 204 || upstream.status === 304) {
+    return new NextResponse(null, { status: upstream.status })
+  }
+
   const responseBody = await upstream.arrayBuffer()
   return new NextResponse(responseBody, {
     status: upstream.status,
