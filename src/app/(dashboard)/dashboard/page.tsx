@@ -122,7 +122,7 @@ export default function DashboardPage() {
 
   const { data: activeSessions, isLoading: sessionsLoading } = useActiveSessions(companyId)
   const { data: devices,        isLoading: devicesLoading  } = useDevices(companyId)
-  const { data: stats,          isLoading: statsLoading    } = useTransactionStats()
+  const { data: stats,          isLoading: statsLoading    } = useTransactionStats({ companyId: companyId || undefined })
   const { data: leads,          isLoading: leadsLoading    } = useAllLeads(companyId)
 
   const onlineDevices = devices?.filter(d => d.status === 'ONLINE').length ?? 0

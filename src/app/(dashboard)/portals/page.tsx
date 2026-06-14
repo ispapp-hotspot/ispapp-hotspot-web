@@ -198,13 +198,8 @@ function PortalPreview({ type, config }: { type: string; config: PortalForm['con
             )}
             {type === 'ISP_LOGIN' && (
               <>
-                <p className="text-[8px] font-bold text-gray-700 text-center mb-1">Você já é cliente do provedor?</p>
-                <div className="h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: btn }}>
-                  <span className="text-[8px] font-semibold text-white">✓ Sim, sou cliente</span>
-                </div>
-                <div className="h-7 rounded-lg flex items-center justify-center border border-gray-200 mt-1">
-                  <span className="text-[8px] font-semibold text-gray-500">+ Não, quero me cadastrar</span>
-                </div>
+                <MiniField label="CPF / CNPJ" placeholder="000.000.000-00" />
+                <MiniButton text={config.buttonText || 'Continuar'} color={btn} />
                 <p className="text-[7px] text-center text-gray-400 mt-0.5 leading-tight">
                   Clientes com contrato ativo têm acesso imediato.
                 </p>
