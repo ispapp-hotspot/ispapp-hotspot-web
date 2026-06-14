@@ -214,12 +214,14 @@ export function Sidebar() {
   return (
     <>
       {/* Mobile hamburger button */}
-      <button
-        onClick={() => setMobileOpen(true)}
-        className="md:hidden fixed top-3 left-3 z-50 w-10 h-10 flex items-center justify-center rounded-lg bg-[#141920] border border-white/10 text-neutral-400 hover:text-white"
-      >
-        <Menu className="w-5 h-5" />
-      </button>
+      {!mobileOpen && (
+        <button
+          onClick={() => setMobileOpen(true)}
+          className="md:hidden fixed top-3 left-3 z-50 w-10 h-10 flex items-center justify-center rounded-lg bg-[#141920] border border-white/10 text-neutral-400 hover:text-white"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+      )}
 
       {/* Mobile backdrop */}
       {mobileOpen && (
