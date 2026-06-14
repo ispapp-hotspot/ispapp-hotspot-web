@@ -172,13 +172,13 @@ export default function FinancialPage() {
 
       {/* Stats — reflect active filters */}
       {statsLoading ? (
-        <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           {[...Array(4)].map((_, i) => (
             <div key={i} className="bg-[#141920] border border-white/5 rounded-2xl p-5 h-20 animate-pulse" />
           ))}
         </div>
       ) : stats ? (
-        <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           <StatCard label="Total transações" value={String(stats.total)}           icon={CreditCard}   accent="bg-neutral-500/10 text-neutral-400" />
           <StatCard label="Aprovadas"         value={String(stats.approved)}        icon={CheckCircle2} accent="bg-emerald-500/10 text-emerald-400" />
           <StatCard label="Pendentes"         value={String(stats.pending)}         icon={Clock}        accent="bg-yellow-500/10 text-yellow-400" />
@@ -273,7 +273,7 @@ export default function FinancialPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[640px]">
               <thead>
                 <tr className="border-b border-white/5 text-xs uppercase tracking-wider text-neutral-500">
                   <th className="px-5 py-3 text-left font-medium w-8" />

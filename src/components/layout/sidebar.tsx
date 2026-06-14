@@ -2,13 +2,13 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/store/auth'
 import {
   ShieldCheck, LayoutDashboard, Wifi, Globe, Package,
   Activity, CreditCard, LogOut, BookOpen, HelpCircle,
-  ScrollText, Users, Megaphone, Settings, Plug, ChevronDown,
+  ScrollText, Users, Megaphone, Settings, Plug, ChevronDown, Menu, X,
 } from 'lucide-react'
 import { CompanySwitcher } from './company-switcher'
 
@@ -40,12 +40,23 @@ const NAV_BOTTOM = [
 export function Sidebar() {
   const pathname = usePathname()
   const logout   = useAuthStore((s) => s.logout)
+  const [mobileOpen, setMobileOpen] = useState(false)
 
   const isFinancialActive = pathname.startsWith('/financial') || pathname.startsWith('/settings/integrations/gateways')
   const isSettingsActive  = pathname.startsWith('/settings/erp')
 
   const [financialOpen, setFinancialOpen] = useState(isFinancialActive)
   const [settingsOpen,  setSettingsOpen]  = useState(isSettingsActive)
+
+  // Close mobile sidebar on route change
+  useEffect(() => { setMobileOpen(false) }, [pathname])
+
+  // Prevent body scroll when mobile sidebar is open
+  useEffect(() => {
+    if (mobileOpen) document.body.style.overflow = 'hidden'
+    else document.body.style.overflow = ''
+    return () => { document.body.style.overflow = '' }
+  }, [mobileOpen])
 
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' })
@@ -57,8 +68,8 @@ export function Sidebar() {
     return pathname === href || pathname.startsWith(href + '/')
   }
 
-  return (
-    <aside className="w-60 shrink-0 flex flex-col bg-[#141920] border-r border-white/5 overflow-y-auto fixed h-full z-40">
+  const sidebarContent = (
+    <>
       <div className="flex items-center gap-3 px-6 h-16 border-b border-white/5 shrink-0">
         <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center shrink-0">
           <ShieldCheck className="w-4 h-4 text-white" />
@@ -67,9 +78,15 @@ export function Sidebar() {
           ISP<span className="text-emerald-400">App</span>
           <span className="ml-1 text-xs font-normal text-neutral-500">Hotspot</span>
         </span>
+        <button
+          onClick={() => setMobileOpen(false)}
+          className="ml-auto md:hidden text-neutral-400 hover:text-white"
+        >
+          <X className="w-5 h-5" />
+        </button>
       </div>
 
-      <nav className="flex-1 px-3 py-4 space-y-0.5">
+      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => (
           <Link
             key={href}
@@ -122,10 +139,9 @@ export function Sidebar() {
             </div>
           )}
         </div>
-
       </nav>
 
-      <div className="border-t border-white/5 pt-3 space-y-0.5">
+      <div className="border-t border-white/5 pt-3 space-y-0.5 shrink-0">
         <div className="px-3 space-y-0.5">
           {/* Configurações group */}
           <div>
@@ -192,6 +208,37 @@ export function Sidebar() {
           </button>
         </div>
       </div>
-    </aside>
+    </>
+  )
+
+  return (
+    <>
+      {/* Mobile hamburger button */}
+      <button
+        onClick={() => setMobileOpen(true)}
+        className="md:hidden fixed top-3 left-3 z-50 w-10 h-10 flex items-center justify-center rounded-lg bg-[#141920] border border-white/10 text-neutral-400 hover:text-white"
+      >
+        <Menu className="w-5 h-5" />
+      </button>
+
+      {/* Mobile backdrop */}
+      {mobileOpen && (
+        <div
+          className="md:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside
+        className={cn(
+          'w-60 shrink-0 flex flex-col bg-[#141920] border-r border-white/5 fixed h-full z-40 transition-transform duration-200',
+          'md:translate-x-0',
+          mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        )}
+      >
+        {sidebarContent}
+      </aside>
+    </>
   )
 }

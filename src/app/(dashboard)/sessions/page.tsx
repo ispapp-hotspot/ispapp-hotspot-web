@@ -183,7 +183,7 @@ export default function SessionsPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
         <StatCard
           label="Sessões ativas"
           value={String(activeData?.total ?? '—')}

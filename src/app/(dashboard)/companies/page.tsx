@@ -144,8 +144,8 @@ export default function CompaniesPage() {
           <p className="text-xs text-neutral-600 mt-1">Crie sua primeira empresa para começar</p>
         </div>
       ) : (
-        <div className="bg-[#141920] border border-white/5 rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="bg-[#141920] border border-white/5 rounded-xl overflow-hidden overflow-x-auto">
+          <table className="w-full text-sm min-w-[540px]">
             <thead>
               <tr className="border-b border-white/5">
                 <th className="px-6 py-3 text-left text-xs uppercase tracking-wider text-neutral-500 font-medium">Nome</th>

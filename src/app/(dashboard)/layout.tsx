@@ -32,9 +32,9 @@ export default function DashboardLayout({
         <AuthGuard>
             <div className="h-screen flex overflow-hidden bg-[#0C1117] text-white font-sans">
                 <Sidebar />
-                <div className="flex-1 flex flex-col min-w-0 overflow-hidden ml-60">
+                <div className="flex-1 flex flex-col min-w-0 overflow-hidden md:ml-60">
                     <OnboardingGuard>
-                        <main className="flex-1 overflow-y-auto scrollbar-thin p-8">
+                        <main className="flex-1 overflow-y-auto scrollbar-thin p-4 sm:p-6 md:p-8 pt-16 md:pt-8">
                             {children}
                         </main>
                     </OnboardingGuard>

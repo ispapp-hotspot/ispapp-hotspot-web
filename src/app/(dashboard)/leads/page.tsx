@@ -152,8 +152,8 @@ export default function LeadsPage() {
           {!search && <p className="text-xs text-neutral-600 mt-1">Os leads aparecem quando usuários preenchem portais do tipo "Cadastro de Lead"</p>}
         </div>
       ) : (
-        <div className="bg-[#141920] border border-white/5 rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="bg-[#141920] border border-white/5 rounded-xl overflow-hidden overflow-x-auto">
+          <table className="w-full text-sm min-w-[600px]">
             <thead>
               <tr className="border-b border-white/5">
                 <th className="px-4 py-3 w-10">
