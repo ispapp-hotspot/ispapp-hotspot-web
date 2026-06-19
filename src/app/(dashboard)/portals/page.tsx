@@ -51,6 +51,7 @@ const configSchema = z.object({
   buttonColor:     z.string().default('#10b981'),
   textColor:       z.string().default('#111111'),
   logoUrl:         z.string().optional().default(''),
+  redirectUrl:     z.string().optional().default(''),
   showCpf:         z.boolean().default(true),
   showEmail:       z.boolean().default(true),
   showPhone:       z.boolean().default(true),
@@ -89,6 +90,7 @@ function defaultConfig(type: string) {
     buttonColor:     '#10b981',
     textColor:       '#111111',
     logoUrl:         '',
+    redirectUrl:     '',
     showCpf:         true,
     showEmail:       true,
     showPhone:       true,
@@ -114,6 +116,7 @@ function portalToForm(p: CaptivePortal): PortalForm {
       buttonColor:     String(p.config.buttonColor     ?? '#10b981'),
       textColor:       String(p.config.textColor       ?? '#111111'),
       logoUrl:         String(p.config.logoUrl         ?? ''),
+      redirectUrl:     String(p.config.redirectUrl     ?? ''),
       showCpf:         p.config.showCpf   !== false,
       showEmail:       p.config.showEmail !== false,
       showPhone:       p.config.showPhone !== false,
@@ -395,6 +398,18 @@ function PortalFormModal({ portal, companyId, onClose }: {
             <div>
               <label className="text-xs text-neutral-500 mb-1 block">URL do logo</label>
               <input {...register('config.logoUrl')} className={inputCls} placeholder="https://..." />
+            </div>
+          </div>
+
+          {/* Redirect pós-autenticação */}
+          <div className={sectionCls}>
+            <p className={labelCls}>Redirect pós-autenticação</p>
+            <div>
+              <label className="text-xs text-neutral-500 mb-1 block">URL de destino (opcional)</label>
+              <input {...register('config.redirectUrl')} className={inputCls} placeholder="https://instagram.com/suaempresa" />
+              <p className="text-[10px] text-neutral-600 mt-1.5">
+                Se preenchido, o usuário será redirecionado para esta URL após conectar (substitui o destino original da MikroTik).
+              </p>
             </div>
           </div>
 
